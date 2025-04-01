@@ -23,9 +23,19 @@ const registerSchema = insertUserSchema.extend({
   password: z.string().min(6, "Password must be at least 6 characters"),
   confirmPassword: z.string().min(6, "Password must be at least 6 characters"),
   role: z.enum(["admin", "student"]),
+  professorCode: z.string().optional(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords do not match",
   path: ["confirmPassword"],
+}).refine((data) => {
+  // Verify professor code if role is admin
+  if (data.role === "admin" && data.professorCode !== "iamaprofessor") {
+    return false;
+  }
+  return true;
+}, {
+  message: "Invalid professor verification code",
+  path: ["professorCode"],
 });
 
 type RegisterFormData = z.infer<typeof registerSchema>;
@@ -53,8 +63,12 @@ export default function AuthForms() {
       password: "",
       confirmPassword: "",
       role: "student",
+      professorCode: "",
     },
   });
+  
+  // Watch role value to conditionally show professor code field
+  const watchRole = registerForm.watch("role");
 
   // Handle login form submission
   const onLoginSubmit = (data: LoginFormData) => {
@@ -63,8 +77,8 @@ export default function AuthForms() {
 
   // Handle register form submission
   const onRegisterSubmit = (data: RegisterFormData) => {
-    // Remove confirmPassword as it's not part of the API schema
-    const { confirmPassword, ...registerData } = data;
+    // Remove confirmPassword and professorCode as they're not part of the API schema
+    const { confirmPassword, professorCode, ...registerData } = data;
     registerMutation.mutate(registerData);
   };
 
@@ -237,6 +251,23 @@ export default function AuthForms() {
                     </FormItem>
                   )}
                 />
+                
+                {/* Show professor code field only when role is admin */}
+                {watchRole === "admin" && (
+                  <FormField
+                    control={registerForm.control}
+                    name="professorCode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Professor Verification Code</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Enter verification code" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 
                 <Button 
                   type="submit" 

@@ -99,6 +99,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Get all courses (for student enrollment)
+  app.get("/api/all-courses", ensureAuthenticated, async (req, res) => {
+    try {
+      // Only students should see this list for enrollment purposes
+      if (req.user.role !== "student") {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      // Get all courses from all admins
+      const courses = await storage.getAllCourses();
+      return res.json(courses);
+    } catch (error) {
+      console.error("Error fetching all courses:", error);
+      return res.status(500).json({ message: "Failed to fetch available courses" });
+    }
+  });
+  
   app.post("/api/courses", ensureAdmin, async (req, res) => {
     try {
       const courseData = insertCourseSchema.parse({
@@ -145,20 +162,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Enrollment routes
-  app.post("/api/enrollments", ensureAdmin, async (req, res) => {
+  app.post("/api/enrollments", ensureAuthenticated, async (req, res) => {
     try {
       const enrollmentData = insertStudentCourseSchema.parse(req.body);
       
-      // Verify the course is owned by this admin
-      const course = await storage.getCourse(enrollmentData.courseId);
-      if (!course || course.adminId !== req.user.id) {
-        return res.status(403).json({ message: "Not authorized to enroll students in this course" });
-      }
-      
-      // Verify the student exists
-      const student = await storage.getUser(enrollmentData.studentId);
-      if (!student || student.role !== "student") {
-        return res.status(400).json({ message: "Invalid student ID" });
+      if (req.user.role === "admin") {
+        // Admin enrolling a student
+        
+        // Verify the course is owned by this admin
+        const course = await storage.getCourse(enrollmentData.courseId);
+        if (!course || course.adminId !== req.user.id) {
+          return res.status(403).json({ message: "Not authorized to enroll students in this course" });
+        }
+        
+        // Verify the student exists
+        const student = await storage.getUser(enrollmentData.studentId);
+        if (!student || student.role !== "student") {
+          return res.status(400).json({ message: "Invalid student ID" });
+        }
+        
+      } else if (req.user.role === "student") {
+        // Student self-enrolling
+        
+        // Only allow enrolling themselves
+        if (enrollmentData.studentId !== req.user.id) {
+          return res.status(403).json({ message: "You can only enroll yourself" });
+        }
+        
+        // Check that the course exists
+        const course = await storage.getCourse(enrollmentData.courseId);
+        if (!course) {
+          return res.status(404).json({ message: "Course not found" });
+        }
+        
+        // Check if student is already enrolled
+        const studentCourses = await storage.getStudentCourses(req.user.id);
+        if (studentCourses.some(c => c.id === enrollmentData.courseId)) {
+          return res.status(400).json({ message: "Already enrolled in this course" });
+        }
       }
       
       const enrollment = await storage.enrollStudent(enrollmentData);

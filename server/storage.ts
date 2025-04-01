@@ -21,6 +21,7 @@ export interface IStorage {
   // Course methods
   getCourse(id: number): Promise<Course | undefined>;
   getCoursesByAdmin(adminId: number): Promise<Course[]>;
+  getAllCourses(): Promise<Course[]>;
   createCourse(course: InsertCourse): Promise<Course>;
   
   // StudentCourse methods
@@ -104,6 +105,10 @@ export class MemStorage implements IStorage {
     return Array.from(this.courses.values()).filter(
       (course) => course.adminId === adminId,
     );
+  }
+  
+  async getAllCourses(): Promise<Course[]> {
+    return Array.from(this.courses.values());
   }
   
   async createCourse(insertCourse: InsertCourse): Promise<Course> {

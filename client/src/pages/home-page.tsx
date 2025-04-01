@@ -8,6 +8,8 @@ import { Loader2 } from "lucide-react";
 import { WebSocketProvider } from "@/lib/websocket";
 import StudentDashboard from "@/components/student-dashboard";
 import AdminDashboard from "@/components/admin-dashboard";
+import { CreateCourse, JoinCourse, NoCourses } from "@/components/course-management";
+import { Button } from "@/components/ui/button";
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -37,38 +39,40 @@ export default function HomePage() {
   }
   
   if (!courses || courses.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-136px)]">
-        <h2 className="text-2xl font-bold mb-2">No Courses Found</h2>
-        <p className="text-muted-foreground mb-6">
-          {user?.role === "admin"
-            ? "You haven't created any courses yet."
-            : "You aren't enrolled in any courses yet."}
-        </p>
-      </div>
-    );
+    return <NoCourses />;
   }
   
   return (
     <WebSocketProvider>
-      {/* Course selector */}
-      <div className="mb-6">
-        <Label htmlFor="course-select" className="block text-sm font-medium mb-1">Select Course:</Label>
-        <Select 
-          value={selectedCourseId}
-          onValueChange={setSelectedCourseId}
-        >
-          <SelectTrigger className="w-full max-w-xs" id="course-select">
-            <SelectValue placeholder="Select a course" />
-          </SelectTrigger>
-          <SelectContent>
-            {courses.map((course) => (
-              <SelectItem key={course.id} value={String(course.id)}>
-                {course.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {/* Course selector with management buttons */}
+      <div className="mb-6 flex justify-between items-end">
+        <div>
+          <Label htmlFor="course-select" className="block text-sm font-medium mb-1">Select Course:</Label>
+          <Select 
+            value={selectedCourseId}
+            onValueChange={setSelectedCourseId}
+          >
+            <SelectTrigger className="w-full max-w-xs" id="course-select">
+              <SelectValue placeholder="Select a course" />
+            </SelectTrigger>
+            <SelectContent>
+              {courses.map((course) => (
+                <SelectItem key={course.id} value={String(course.id)}>
+                  {course.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        
+        {/* Add button for creating/joining courses */}
+        <div>
+          {user?.role === "admin" ? (
+            <CreateCourse />
+          ) : (
+            <JoinCourse />
+          )}
+        </div>
       </div>
       
       {selectedCourse && (
