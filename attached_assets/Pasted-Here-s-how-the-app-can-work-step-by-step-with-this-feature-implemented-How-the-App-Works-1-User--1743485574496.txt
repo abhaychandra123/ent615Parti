@@ -1,0 +1,51 @@
+Here's how the app can work, step-by-step, with this feature implemented:
+How the App Works
+1. User Roles and Login
+Admin (Professor/TA):
+Logs into the app and selects the class they are tracking.
+Opens the live dashboard to monitor student participation during the session.
+Students:
+Log into the app before class starts.
+Access their personal dashboard with a "Raise Hand" button to signal their intent to ask or answer a question.
+2. Live Participation Tracking
+For Students:
+During class, if a student wants to ask or answer a question:
+They click the "Raise Hand" button on their dashboard.
+Their name dynamically appears on the professor/TA's live dashboard in real-time, signaling that they are participating.
+Optionally, they can add a short note (e.g., "Question about topic X") when clicking the button.
+For Admin (Professor/TA):
+The professor/TA sees a live list of students who have clicked "Raise Hand."
+For each student listed:
+The TA can assign participation points (e.g., +1, +2) with a simple click.
+Optionally, they can add notes or feedback for context (e.g., "Insightful answer about topic Y").
+Once participation is logged, the student's name disappears from the live queue.
+3. Post-Class Data Management
+After class, all participation data is automatically saved in the database.
+The professor/TA can review and edit participation logs if needed (e.g., adjust scores or add additional notes).
+4. Student Access
+Students can log into their dashboard anytime to:
+View their total participation score for the semester.
+See a timeline of their contributions with dates and feedback added by the professor/TA.
+Technical Workflow
+Frontend Workflow:
+Students interact with a simple interface featuring a "Raise Hand" button.
+Button triggers an event that sends their name and optional note to the backend.
+Admins view a real-time list of participants on their dashboard.
+Dashboard includes buttons to assign points and add notes dynamically.
+Backend Workflow:
+When a student clicks "Raise Hand," their request is sent to the backend via WebSocket or REST API.
+The backend processes this request and updates the live queue for the professor/TA's dashboard.
+Participation data is stored in the database after points are assigned.
+Real-Time Updates:
+Use WebSockets (e.g., Socket.IO) or Firebase Realtime Database for instant updates between students and admin dashboards.
+Example User Interface
+Student Dashboard:
+A clean interface with:
+A prominent "Raise Hand" button.
+Optional text field for adding context (e.g., "Question about topic X").
+A summary section showing their total participation score and past contributions.
+Admin Dashboard:
+A live queue displaying:
+Names of students who clicked "Raise Hand."
+Buttons next to each name to assign points (+1, +2).
+An optional text box for adding feedback or notes.
