@@ -1,21 +1,19 @@
 import { 
-  users, type User, type InsertUser,
-  courses, type Course, type InsertCourse,
-  studentCourses, type StudentCourse, type InsertStudentCourse,
-  participationRequests, type ParticipationRequest, type InsertParticipationRequest, 
+  type User, type InsertUser,
+  type Course, type InsertCourse,
+  type StudentCourse, type InsertStudentCourse,
+  type ParticipationRequest, type InsertParticipationRequest, 
   type ParticipationRequestWithStudent,
-  participationRecords, type ParticipationRecord, type InsertParticipationRecord,
+  type ParticipationRecord, type InsertParticipationRecord,
   type ParticipationRecordWithStudent
 } from "@shared/schema";
-import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
 import session from "express-session";
 import { IStorage } from "./storage";
 import connectPg from "connect-pg-simple";
 import pg from "pg";
 const { Pool } = pg;
 
-// Connect to PostgreSQL for session store
+// Connect to PostgreSQL directly
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
@@ -34,206 +32,212 @@ export class DatabaseStorage implements IStorage {
 
   // User methods
   async getUser(id: number): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+    return result.rows[0];
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    return result.rows[0];
   }
 
   async createUser(user: InsertUser): Promise<User> {
     // Ensure role is set to 'student' by default if not provided
-    const userWithRole = { 
-      ...user, 
-      role: user.role || 'student' 
-    };
+    const role = user.role || 'student';
     
-    const [createdUser] = await db.insert(users).values(userWithRole).returning();
-    return createdUser;
+    const result = await pool.query(
+      'INSERT INTO users (username, password, email, role, name) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [user.username, user.password, user.email, role, user.name]
+    );
+    
+    return result.rows[0];
   }
   
   // Course methods
   async getCourse(id: number): Promise<Course | undefined> {
-    const [course] = await db.select().from(courses).where(eq(courses.id, id));
-    return course;
+    const result = await pool.query('SELECT * FROM courses WHERE id = $1', [id]);
+    return result.rows[0];
   }
   
   async getCoursesByAdmin(adminId: number): Promise<Course[]> {
-    return await db.select().from(courses).where(eq(courses.adminId, adminId));
+    const result = await pool.query('SELECT * FROM courses WHERE admin_id = $1', [adminId]);
+    return result.rows;
   }
   
   async getAllCourses(): Promise<Course[]> {
-    return await db.select().from(courses);
+    const result = await pool.query('SELECT * FROM courses');
+    return result.rows;
   }
   
   async createCourse(course: InsertCourse): Promise<Course> {
-    // Handle null description
-    const courseWithDescription = {
-      ...course,
-      description: course.description || null
-    };
+    const result = await pool.query(
+      'INSERT INTO courses (name, description, admin_id) VALUES ($1, $2, $3) RETURNING *',
+      [course.name, course.description || null, course.adminId]
+    );
     
-    const [createdCourse] = await db.insert(courses).values(courseWithDescription).returning();
-    return createdCourse;
+    return result.rows[0];
   }
   
   // StudentCourse methods
   async enrollStudent(studentCourse: InsertStudentCourse): Promise<StudentCourse> {
-    const [createdStudentCourse] = await db.insert(studentCourses).values(studentCourse).returning();
-    return createdStudentCourse;
+    const result = await pool.query(
+      'INSERT INTO student_courses (student_id, course_id) VALUES ($1, $2) RETURNING *',
+      [studentCourse.studentId, studentCourse.courseId]
+    );
+    
+    return result.rows[0];
   }
   
   async getStudentCourses(studentId: number): Promise<Course[]> {
-    const enrolledCourses = await db.select({
-      course: courses
-    })
-    .from(studentCourses)
-    .innerJoin(courses, eq(studentCourses.courseId, courses.id))
-    .where(eq(studentCourses.studentId, studentId));
+    const result = await pool.query(
+      `SELECT c.* FROM courses c
+       JOIN student_courses sc ON c.id = sc.course_id
+       WHERE sc.student_id = $1`,
+      [studentId]
+    );
     
-    return enrolledCourses.map(ec => ec.course);
+    return result.rows;
   }
   
   async getEnrolledStudents(courseId: number): Promise<User[]> {
-    const enrolledStudents = await db.select({
-      student: users
-    })
-    .from(studentCourses)
-    .innerJoin(users, eq(studentCourses.studentId, users.id))
-    .where(eq(studentCourses.courseId, courseId));
+    const result = await pool.query(
+      `SELECT u.* FROM users u
+       JOIN student_courses sc ON u.id = sc.student_id
+       WHERE sc.course_id = $1`,
+      [courseId]
+    );
     
-    return enrolledStudents.map(es => es.student);
+    return result.rows;
   }
   
   // ParticipationRequest methods
   async createParticipationRequest(request: InsertParticipationRequest): Promise<ParticipationRequest> {
-    // Handle null note
-    const requestWithNote = {
-      ...request,
-      note: request.note || null,
-      active: true,
-      timestamp: new Date()
-    };
+    const timestamp = new Date();
     
-    const [createdRequest] = await db.insert(participationRequests).values(requestWithNote).returning();
-    return createdRequest;
+    const result = await pool.query(
+      `INSERT INTO participation_requests 
+       (student_id, course_id, note, timestamp, active) 
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [request.studentId, request.courseId, request.note || null, timestamp, true]
+    );
+    
+    return result.rows[0];
   }
   
   async getActiveParticipationRequests(courseId: number): Promise<ParticipationRequestWithStudent[]> {
-    const requests = await db.select({
-      id: participationRequests.id,
-      studentId: participationRequests.studentId,
-      courseId: participationRequests.courseId,
-      note: participationRequests.note,
-      timestamp: participationRequests.timestamp,
-      active: participationRequests.active,
-      studentName: users.name,
-      studentUsername: users.username
-    })
-    .from(participationRequests)
-    .innerJoin(users, eq(participationRequests.studentId, users.id))
-    .where(and(
-      eq(participationRequests.courseId, courseId),
-      eq(participationRequests.active, true)
-    ))
-    .orderBy(participationRequests.timestamp);
+    const result = await pool.query(
+      `SELECT pr.*, u.name as student_name, u.username as student_username
+       FROM participation_requests pr
+       JOIN users u ON pr.student_id = u.id
+       WHERE pr.course_id = $1 AND pr.active = true
+       ORDER BY pr.timestamp`,
+      [courseId]
+    );
     
     // Transform to the expected format
-    return requests.map(req => ({
-      id: req.id,
-      studentId: req.studentId,
-      courseId: req.courseId,
-      note: req.note,
-      timestamp: req.timestamp,
-      active: req.active,
+    return result.rows.map(row => ({
+      id: row.id,
+      studentId: row.student_id,
+      courseId: row.course_id,
+      note: row.note,
+      timestamp: row.timestamp,
+      active: row.active,
       student: {
-        id: req.studentId,
-        name: req.studentName,
-        username: req.studentUsername
+        id: row.student_id,
+        name: row.student_name,
+        username: row.student_username
       }
     }));
   }
   
   async deactivateParticipationRequest(id: number): Promise<ParticipationRequest | undefined> {
-    const [updatedRequest] = await db
-      .update(participationRequests)
-      .set({ active: false })
-      .where(eq(participationRequests.id, id))
-      .returning();
-      
-    return updatedRequest;
+    const result = await pool.query(
+      'UPDATE participation_requests SET active = false WHERE id = $1 RETURNING *',
+      [id]
+    );
+    
+    return result.rows[0];
   }
   
   async getParticipationRequestById(id: number): Promise<ParticipationRequest | undefined> {
-    const [request] = await db.select().from(participationRequests).where(eq(participationRequests.id, id));
-    return request;
+    const result = await pool.query('SELECT * FROM participation_requests WHERE id = $1', [id]);
+    return result.rows[0];
   }
   
   // ParticipationRecord methods
   async createParticipationRecord(record: InsertParticipationRecord): Promise<ParticipationRecord> {
-    // Handle null fields
-    const recordWithDefaults = {
-      ...record,
-      note: record.note || null,
-      feedback: record.feedback || null,
-      timestamp: new Date()
-    };
+    const timestamp = new Date();
     
-    const [createdRecord] = await db.insert(participationRecords).values(recordWithDefaults).returning();
-    return createdRecord;
+    const result = await pool.query(
+      `INSERT INTO participation_records 
+       (student_id, course_id, points, feedback, note, timestamp) 
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [
+        record.studentId, 
+        record.courseId, 
+        record.points, 
+        record.feedback || null, 
+        record.note || null, 
+        timestamp
+      ]
+    );
+    
+    return result.rows[0];
   }
   
   async getParticipationRecordsByCourse(courseId: number): Promise<ParticipationRecordWithStudent[]> {
-    const records = await db.select({
-      id: participationRecords.id,
-      studentId: participationRecords.studentId,
-      courseId: participationRecords.courseId,
-      points: participationRecords.points,
-      note: participationRecords.note,
-      feedback: participationRecords.feedback,
-      timestamp: participationRecords.timestamp,
-      studentName: users.name,
-      studentUsername: users.username
-    })
-    .from(participationRecords)
-    .innerJoin(users, eq(participationRecords.studentId, users.id))
-    .where(eq(participationRecords.courseId, courseId))
-    .orderBy(desc(participationRecords.timestamp));
+    const result = await pool.query(
+      `SELECT pr.*, u.name as student_name, u.username as student_username
+       FROM participation_records pr
+       JOIN users u ON pr.student_id = u.id
+       WHERE pr.course_id = $1
+       ORDER BY pr.timestamp DESC`,
+      [courseId]
+    );
     
     // Transform to the expected format
-    return records.map(rec => ({
-      id: rec.id,
-      studentId: rec.studentId,
-      courseId: rec.courseId,
-      points: rec.points,
-      note: rec.note,
-      feedback: rec.feedback,
-      timestamp: rec.timestamp,
+    return result.rows.map(row => ({
+      id: row.id,
+      studentId: row.student_id,
+      courseId: row.course_id,
+      points: row.points,
+      feedback: row.feedback,
+      note: row.note,
+      timestamp: row.timestamp,
       student: {
-        id: rec.studentId,
-        name: rec.studentName,
-        username: rec.studentUsername
+        id: row.student_id,
+        name: row.student_name,
+        username: row.student_username
       }
     }));
   }
   
   async getParticipationRecordsByStudent(studentId: number, courseId: number): Promise<ParticipationRecord[]> {
-    return await db.select()
-      .from(participationRecords)
-      .where(and(
-        eq(participationRecords.studentId, studentId),
-        eq(participationRecords.courseId, courseId)
-      ))
-      .orderBy(desc(participationRecords.timestamp));
+    const result = await pool.query(
+      `SELECT * FROM participation_records 
+       WHERE student_id = $1 AND course_id = $2
+       ORDER BY timestamp DESC`,
+      [studentId, courseId]
+    );
+    
+    return result.rows.map(row => ({
+      id: row.id,
+      studentId: row.student_id,
+      courseId: row.course_id,
+      points: row.points,
+      feedback: row.feedback,
+      note: row.note,
+      timestamp: row.timestamp
+    }));
   }
   
   async getTotalParticipationPointsByStudent(studentId: number, courseId: number): Promise<number> {
-    // Get all participation records for this student in this course
-    const records = await this.getParticipationRecordsByStudent(studentId, courseId);
+    const result = await pool.query(
+      `SELECT SUM(points) as total FROM participation_records 
+       WHERE student_id = $1 AND course_id = $2`,
+      [studentId, courseId]
+    );
     
-    // Calculate the sum manually
-    return records.reduce((sum, record) => sum + record.points, 0);
+    return parseInt(result.rows[0]?.total || '0');
   }
 }
