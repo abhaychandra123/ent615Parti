@@ -1,11 +1,10 @@
 import { 
   type User, type InsertUser,
-  type Course, type InsertCourse,
-  type StudentCourse, type InsertStudentCourse,
   type ParticipationRequest, type InsertParticipationRequest, 
   type ParticipationRequestWithStudent,
   type ParticipationRecord, type InsertParticipationRecord,
-  type ParticipationRecordWithStudent
+  type ParticipationRecordWithStudent,
+  DEFAULT_COURSE
 } from "@shared/schema";
 import session from "express-session";
 import { IStorage } from "./storage";
@@ -47,60 +46,9 @@ export class DatabaseStorage implements IStorage {
     return result.rows[0];
   }
   
-  // Course methods
-  async getCourse(id: number): Promise<Course | undefined> {
-    const result = await pool.query('SELECT * FROM courses WHERE id = $1', [id]);
-    return result.rows[0];
-  }
-  
-  async getCoursesByAdmin(adminId: number): Promise<Course[]> {
-    const result = await pool.query('SELECT * FROM courses WHERE admin_id = $1', [adminId]);
-    return result.rows;
-  }
-  
-  async getAllCourses(): Promise<Course[]> {
-    const result = await pool.query('SELECT * FROM courses');
-    return result.rows;
-  }
-  
-  async createCourse(course: InsertCourse): Promise<Course> {
-    const result = await pool.query(
-      'INSERT INTO courses (name, description, admin_id) VALUES ($1, $2, $3) RETURNING *',
-      [course.name, course.description || null, course.adminId]
-    );
-    
-    return result.rows[0];
-  }
-  
-  // StudentCourse methods
-  async enrollStudent(studentCourse: InsertStudentCourse): Promise<StudentCourse> {
-    const result = await pool.query(
-      'INSERT INTO student_courses (student_id, course_id) VALUES ($1, $2) RETURNING *',
-      [studentCourse.studentId, studentCourse.courseId]
-    );
-    
-    return result.rows[0];
-  }
-  
-  async getStudentCourses(studentId: number): Promise<Course[]> {
-    const result = await pool.query(
-      `SELECT c.* FROM courses c
-       JOIN student_courses sc ON c.id = sc.course_id
-       WHERE sc.student_id = $1`,
-      [studentId]
-    );
-    
-    return result.rows;
-  }
-  
-  async getEnrolledStudents(courseId: number): Promise<User[]> {
-    const result = await pool.query(
-      `SELECT u.* FROM users u
-       JOIN student_courses sc ON u.id = sc.student_id
-       WHERE sc.course_id = $1`,
-      [courseId]
-    );
-    
+  // Get all students
+  async getAllStudents(): Promise<User[]> {
+    const result = await pool.query('SELECT * FROM users WHERE role = $1', ['student']);
     return result.rows;
   }
   
@@ -112,20 +60,19 @@ export class DatabaseStorage implements IStorage {
       `INSERT INTO participation_requests 
        (student_id, course_id, note, timestamp, active) 
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [request.studentId, request.courseId, request.note || null, timestamp, true]
+      [request.studentId, DEFAULT_COURSE.id, request.note || null, timestamp, true]
     );
     
     return result.rows[0];
   }
   
-  async getActiveParticipationRequests(courseId: number): Promise<ParticipationRequestWithStudent[]> {
+  async getActiveParticipationRequests(): Promise<ParticipationRequestWithStudent[]> {
     const result = await pool.query(
       `SELECT pr.*, u.name as student_name, u.username as student_username
        FROM participation_requests pr
        JOIN users u ON pr.student_id = u.id
-       WHERE pr.course_id = $1 AND pr.active = true
-       ORDER BY pr.timestamp`,
-      [courseId]
+       WHERE pr.active = true
+       ORDER BY pr.timestamp`
     );
     
     // Transform to the expected format
@@ -168,7 +115,7 @@ export class DatabaseStorage implements IStorage {
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
       [
         record.studentId, 
-        record.courseId, 
+        DEFAULT_COURSE.id, 
         record.points, 
         record.feedback || null, 
         record.note || null, 
@@ -179,14 +126,12 @@ export class DatabaseStorage implements IStorage {
     return result.rows[0];
   }
   
-  async getParticipationRecordsByCourse(courseId: number): Promise<ParticipationRecordWithStudent[]> {
+  async getAllParticipationRecords(): Promise<ParticipationRecordWithStudent[]> {
     const result = await pool.query(
       `SELECT pr.*, u.name as student_name, u.username as student_username
        FROM participation_records pr
        JOIN users u ON pr.student_id = u.id
-       WHERE pr.course_id = $1
-       ORDER BY pr.timestamp DESC`,
-      [courseId]
+       ORDER BY pr.timestamp DESC`
     );
     
     // Transform to the expected format
@@ -206,12 +151,12 @@ export class DatabaseStorage implements IStorage {
     }));
   }
   
-  async getParticipationRecordsByStudent(studentId: number, courseId: number): Promise<ParticipationRecord[]> {
+  async getParticipationRecordsByStudent(studentId: number): Promise<ParticipationRecord[]> {
     const result = await pool.query(
       `SELECT * FROM participation_records 
-       WHERE student_id = $1 AND course_id = $2
+       WHERE student_id = $1
        ORDER BY timestamp DESC`,
-      [studentId, courseId]
+      [studentId]
     );
     
     return result.rows.map(row => ({
@@ -225,11 +170,11 @@ export class DatabaseStorage implements IStorage {
     }));
   }
   
-  async getTotalParticipationPointsByStudent(studentId: number, courseId: number): Promise<number> {
+  async getTotalParticipationPointsByStudent(studentId: number): Promise<number> {
     const result = await pool.query(
       `SELECT SUM(points) as total FROM participation_records 
-       WHERE student_id = $1 AND course_id = $2`,
-      [studentId, courseId]
+       WHERE student_id = $1`,
+      [studentId]
     );
     
     return parseInt(result.rows[0]?.total || '0');

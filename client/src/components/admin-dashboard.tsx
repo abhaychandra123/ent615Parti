@@ -12,7 +12,6 @@ import { Course, ParticipationRequestWithStudent, ParticipationRecordWithStudent
 import { format } from "date-fns";
 import { MessageSquare, RefreshCcw, Download as DownloadIcon, User as UserIcon, BarChart as ChartIcon, Clock as ClockIcon, Hand as HandIcon } from "lucide-react";
 import FeedbackModal from "@/components/feedback-modal";
-import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 
 type AdminDashboardProps = {
@@ -22,7 +21,7 @@ type AdminDashboardProps = {
 export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { connect, disconnect, subscribe } = useWebSocket();
+  const { subscribe } = useWebSocket();
   const [selectedDateRange, setSelectedDateRange] = useState("month");
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<{id: number, name: string} | null>(null);
@@ -34,9 +33,8 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
     isLoading: requestsLoading,
     refetch: refetchRequests 
   } = useQuery<ParticipationRequestWithStudent[]>({
-    queryKey: ["/api/courses", selectedCourse.id, "participation-requests"],
-    enabled: !!selectedCourse.id,
-    refetchInterval: 10000, // Refresh every 10 seconds as a backup in case WebSocket fails
+    queryKey: ["/api/participation-requests"],
+    refetchInterval: 10000, // Refresh every 10 seconds as a backup
   });
   
   // Get participation records
@@ -45,45 +43,41 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
     isLoading: recordsLoading,
     refetch: refetchRecords
   } = useQuery<ParticipationRecordWithStudent[]>({
-    queryKey: ["/api/courses", selectedCourse.id, "participation-records"],
-    enabled: !!selectedCourse.id,
+    queryKey: ["/api/participation-records"],
   });
   
-  // Connect to WebSocket when course is selected
+  // Subscribe to WebSocket events
   useEffect(() => {
-    if (selectedCourse.id) {
-      connect(selectedCourse.id);
-      
-      // Subscribe to new participation requests
-      const requestSubscription = subscribe("participationRequest", () => {
-        refetchRequests();
-      });
-      
-      // Subscribe to participation request deactivations
-      const deactivationSubscription = subscribe("participationRequestDeactivated", () => {
-        refetchRequests();
-      });
-      
-      // Subscribe to new participation records
-      const recordSubscription = subscribe("participationRecordCreated", () => {
-        refetchRecords();
-      });
-      
-      return () => {
-        requestSubscription();
-        deactivationSubscription();
-        recordSubscription();
-        disconnect();
-      };
-    }
-  }, [selectedCourse.id]);
+    // Subscribe to new participation requests
+    const requestSubscription = subscribe("participationRequest", () => {
+      console.log("Received new participation request");
+      refetchRequests();
+    });
+    
+    // Subscribe to participation request deactivations
+    const deactivationSubscription = subscribe("participationRequestDeactivated", () => {
+      console.log("Participation request deactivated");
+      refetchRequests();
+    });
+    
+    // Subscribe to new participation records
+    const recordSubscription = subscribe("participationRecordCreated", () => {
+      console.log("New participation record created");
+      refetchRecords();
+    });
+    
+    return () => {
+      requestSubscription();
+      deactivationSubscription();
+      recordSubscription();
+    };
+  }, [subscribe, refetchRequests, refetchRecords]);
   
   // Handle assigning participation points
   const handleAssignPoints = async (studentId: number, points: number, requestId: number) => {
     try {
       await apiRequest("POST", "/api/participation-records", {
         studentId,
-        courseId: selectedCourse.id,
         points,
         requestId
       });
@@ -121,7 +115,6 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       
       await apiRequest("POST", "/api/participation-records", {
         studentId: selectedStudent.id,
-        courseId: selectedCourse.id,
         points,
         feedback,
         requestId: selectedRequestId
@@ -186,19 +179,51 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
     });
   };
 
+  // Function to calculate student participation statistics
+  const calculateStudentStats = () => {
+    if (!participationRecords) return [];
+    
+    const studentMap: Record<number, {
+      id: number,
+      name: string,
+      username: string,
+      totalPoints: number,
+      participationCount: number,
+      lastParticipation: Date | null
+    }> = {};
+    
+    participationRecords.forEach(record => {
+      const { student, points, timestamp } = record;
+      
+      if (!studentMap[student.id]) {
+        studentMap[student.id] = {
+          id: student.id,
+          name: student.name,
+          username: student.username,
+          totalPoints: 0,
+          participationCount: 0,
+          lastParticipation: null
+        };
+      }
+      
+      studentMap[student.id].totalPoints += points;
+      studentMap[student.id].participationCount += 1;
+      
+      const recordDate = new Date(timestamp);
+      if (!studentMap[student.id].lastParticipation || 
+          recordDate > studentMap[student.id].lastParticipation) {
+        studentMap[student.id].lastParticipation = recordDate;
+      }
+    });
+    
+    return Object.values(studentMap).sort((a, b) => b.totalPoints - a.totalPoints);
+  };
+  
+  // Get student statistics
+  const studentStats = calculateStudentStats();
+
   return (
     <div className="space-y-6">
-      {/* Course selector */}
-      <div className="mb-6">
-        <label htmlFor="class-select" className="block text-sm font-medium mb-1">Current Course:</label>
-        <div className="flex items-center">
-          <h2 className="text-xl font-medium mr-4">{selectedCourse.name}</h2>
-          <span className="text-sm text-muted-foreground italic">
-            Current Session: {format(new Date(), "MMMM d, yyyy")}
-          </span>
-        </div>
-      </div>
-      
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Participation queue */}
         <Card>
@@ -387,7 +412,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
               <RefreshCcw className="animate-spin h-6 w-6 mx-auto mb-2 text-muted-foreground" />
               <p className="text-muted-foreground">Loading overview data...</p>
             </div>
-          ) : participationRecords && participationRecords.length > 0 ? (
+          ) : studentStats.length > 0 ? (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -400,57 +425,28 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {/* Group records by student and calculate stats */}
-                  {Object.values(
-                    participationRecords.reduce((acc, record) => {
-                      const studentId = record.student.id;
-                      if (!acc[studentId]) {
-                        acc[studentId] = {
-                          student: record.student,
-                          totalPoints: 0,
-                          count: 0,
-                          lastParticipation: new Date(0)
-                        };
-                      }
-                      
-                      acc[studentId].totalPoints += record.points;
-                      acc[studentId].count += 1;
-                      
-                      const recordDate = new Date(record.timestamp);
-                      if (recordDate > acc[studentId].lastParticipation) {
-                        acc[studentId].lastParticipation = recordDate;
-                      }
-                      
-                      return acc;
-                    }, {} as Record<number, { 
-                      student: {id: number, name: string}, 
-                      totalPoints: number, 
-                      count: number, 
-                      lastParticipation: Date 
-                    }>)
-                  )
-                  .sort((a, b) => b.totalPoints - a.totalPoints)
-                  .map((studentSummary) => (
-                    <TableRow key={studentSummary.student.id}>
+                  {studentStats.map((student) => (
+                    <TableRow key={student.id}>
+                      <TableCell className="font-medium">{student.name}</TableCell>
+                      <TableCell>{student.totalPoints}</TableCell>
+                      <TableCell>{student.participationCount}</TableCell>
                       <TableCell>
-                        <div className="font-medium">{studentSummary.student.name}</div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">{studentSummary.totalPoints} points</div>
-                      </TableCell>
-                      <TableCell>
-                        {studentSummary.count} contribution{studentSummary.count !== 1 && 's'}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {format(studentSummary.lastParticipation, "MMM d, yyyy")}
+                        {student.lastParticipation 
+                          ? format(student.lastParticipation, "MMM d, h:mm a") 
+                          : "-"
+                        }
                       </TableCell>
                       <TableCell>
                         <Button 
-                          variant="link" 
-                          className="p-0 h-auto"
-                          onClick={() => handleOpenFeedbackModal(studentSummary.student)}
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => handleOpenFeedbackModal({
+                            id: student.id, 
+                            name: student.name
+                          })}
+                          title="Add feedback"
                         >
-                          Add Points
+                          <MessageSquare className="h-4 w-4" />
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -461,9 +457,9 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
           ) : (
             <div className="py-12 text-center">
               <ChartIcon className="mx-auto h-12 w-12 text-muted-foreground/50 mb-3" />
-              <p className="text-muted-foreground">No participation data for this course yet</p>
+              <p className="text-muted-foreground">No participation data available</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Overview will appear when students participate
+                Students' participation stats will appear here
               </p>
             </div>
           )}
@@ -471,14 +467,14 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       </Card>
       
       {/* Feedback Modal */}
-      <FeedbackModal 
-        isOpen={feedbackModalOpen}
-        onClose={() => setFeedbackModalOpen(false)}
-        onSubmit={handleFeedbackSubmit}
-        studentName={selectedStudent?.name || ""}
-      />
+      {feedbackModalOpen && selectedStudent && (
+        <FeedbackModal
+          isOpen={feedbackModalOpen}
+          onClose={() => setFeedbackModalOpen(false)}
+          onSubmit={handleFeedbackSubmit}
+          studentName={selectedStudent.name}
+        />
+      )}
     </div>
   );
 }
-
-// Custom chart components

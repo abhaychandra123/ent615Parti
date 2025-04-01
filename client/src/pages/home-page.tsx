@@ -1,58 +1,87 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Course } from "@shared/schema";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { DEFAULT_COURSE } from "@shared/schema";
+import { Loader2, Users, Award, BookOpen } from "lucide-react";
 import { WebSocketProvider, useWebSocket } from "@/lib/websocket";
 import StudentDashboard from "@/components/student-dashboard";
 import AdminDashboard from "@/components/admin-dashboard";
-import { CreateCourse, JoinCourse, NoCourses } from "@/components/course-management";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-// Component that manages WebSocket connection for a specific course
-function CourseWithWebSocket({ 
-  selectedCourse, 
-  children 
-}: { 
-  selectedCourse: Course;
-  children: React.ReactNode; 
-}) {
-  // Use the websocket hook
+// Component that manages WebSocket connection
+function CourseWithWebSocket({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const { connect } = useWebSocket();
   
-  // Connect to the WebSocket when the selected course changes
+  // Connect to the WebSocket when the component mounts
   useEffect(() => {
-    if (selectedCourse) {
-      console.log("Connecting to WebSocket for course:", selectedCourse.id);
-      connect(selectedCourse.id);
+    if (user) {
+      console.log("Connecting to WebSocket for user:", user.id);
+      connect();
     }
-  }, [selectedCourse, connect]);
+  }, [user, connect]);
   
   return <>{children}</>;
 }
 
+function CourseHeader() {
+  const { user } = useAuth();
+  
+  return (
+    <div className="mb-6">
+      <h1 className="text-3xl font-bold tracking-tight">
+        {DEFAULT_COURSE.name}
+      </h1>
+      <p className="text-muted-foreground mt-1 mb-4">{DEFAULT_COURSE.description}</p>
+      
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Role</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold capitalize">{user?.role}</div>
+            <p className="text-xs text-muted-foreground">
+              {user?.role === "admin" ? "Manage student participation" : "Participate in class discussions"}
+            </p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Course ID</CardTitle>
+            <BookOpen className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{DEFAULT_COURSE.id}</div>
+            <p className="text-xs text-muted-foreground">
+              Spring 2025 Semester
+            </p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Participation</CardTitle>
+            <Award className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">Active</div>
+            <p className="text-xs text-muted-foreground">
+              {user?.role === "admin" ? "Track student engagement" : "Earn points by participating"}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 function HomePageContent() {
   const { user } = useAuth();
-  const [selectedCourseId, setSelectedCourseId] = useState<string>("");
-  const queryClient = useQueryClient();
   
-  // Fetch courses
-  const { data: courses, isLoading: coursesLoading } = useQuery<Course[]>({
-    queryKey: ["/api/courses"],
-  });
-  
-  // Set first course as selected when courses load
-  useEffect(() => {
-    if (courses && courses.length > 0 && !selectedCourseId) {
-      setSelectedCourseId(String(courses[0].id));
-    }
-  }, [courses, selectedCourseId]);
-  
-  // Get the selected course object
-  const selectedCourse = courses?.find(course => course.id === parseInt(selectedCourseId));
-  
-  if (coursesLoading) {
+  if (!user) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-136px)]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -60,51 +89,14 @@ function HomePageContent() {
     );
   }
   
-  if (!courses || courses.length === 0) {
-    return <NoCourses />;
-  }
-  
   return (
     <>
-      {/* Course selector with management buttons */}
-      <div className="mb-6 flex justify-between items-end">
-        <div>
-          <Label htmlFor="course-select" className="block text-sm font-medium mb-1">Select Course:</Label>
-          <Select 
-            value={selectedCourseId}
-            onValueChange={setSelectedCourseId}
-          >
-            <SelectTrigger className="w-full max-w-xs" id="course-select">
-              <SelectValue placeholder="Select a course" />
-            </SelectTrigger>
-            <SelectContent>
-              {courses.map((course) => (
-                <SelectItem key={course.id} value={String(course.id)}>
-                  {course.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        
-        {/* Add button for creating/joining courses */}
-        <div>
-          {user?.role === "admin" ? (
-            <CreateCourse />
-          ) : (
-            <JoinCourse />
-          )}
-        </div>
-      </div>
+      <CourseHeader />
       
-      {selectedCourse && (
-        <CourseWithWebSocket selectedCourse={selectedCourse}>
-          {user?.role === "admin" ? (
-            <AdminDashboard selectedCourse={selectedCourse} />
-          ) : (
-            <StudentDashboard selectedCourse={selectedCourse} />
-          )}
-        </CourseWithWebSocket>
+      {user.role === "admin" ? (
+        <AdminDashboard selectedCourse={DEFAULT_COURSE} />
+      ) : (
+        <StudentDashboard selectedCourse={DEFAULT_COURSE} />
       )}
     </>
   );
@@ -114,7 +106,9 @@ function HomePageContent() {
 export default function HomePage() {
   return (
     <WebSocketProvider>
-      <HomePageContent />
+      <CourseWithWebSocket>
+        <HomePageContent />
+      </CourseWithWebSocket>
     </WebSocketProvider>
   );
 }

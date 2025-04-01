@@ -3,7 +3,12 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
-import { insertCourseSchema, insertStudentCourseSchema, insertParticipationRequestSchema, insertParticipationRecordSchema, User } from "@shared/schema";
+import { DEFAULT_COURSE } from "@shared/schema";
+import { 
+  insertParticipationRequestSchema, 
+  insertParticipationRecordSchema, 
+  type User 
+} from "@shared/schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
 
@@ -76,15 +81,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         if (parsedMessage.type === "join") {
-          const { courseId, userId } = parsedMessage.payload;
-          // Store course ID with the connection
-          (ws as any).courseData = { courseId, userId };
-          console.log(`User ${userId} joined course ${courseId} WebSocket room`);
+          const { userId } = parsedMessage.payload;
+          // Store user data with the connection
+          (ws as any).userData = { userId };
+          console.log(`User ${userId} joined WebSocket room`);
           
           // Confirm the join
           ws.send(JSON.stringify({ 
             type: "joinConfirmed", 
-            payload: { courseId, userId, message: "Successfully joined course WebSocket room" } 
+            payload: { userId, courseName: DEFAULT_COURSE.name, message: "Successfully joined WebSocket room" } 
           }));
           return;
         }
@@ -107,15 +112,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error("WebSocket server error:", error);
   });
   
-  // Broadcast to all clients in a specific course
-  const broadcastToCourse = (courseId: number, message: WebSocketMessage) => {
+  // Broadcast to all clients
+  const broadcastToAll = (message: WebSocketMessage) => {
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         try {
-          const clientData = (client as any).courseData;
-          if (clientData && clientData.courseId === courseId) {
-            client.send(JSON.stringify(message));
-          }
+          client.send(JSON.stringify(message));
         } catch (error) {
           console.error("WebSocket broadcast error:", error);
         }
@@ -123,187 +125,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   };
 
-  // Course routes
-  app.get("/api/courses", ensureAuthenticated, async (req, res) => {
+  // User route - Get all students
+  app.get("/api/students", ensureAuthenticated, async (req, res) => {
     try {
-      if (req.user && req.user.role === "admin") {
-        const courses = await storage.getCoursesByAdmin(req.user.id);
-        return res.json(courses);
-      } else if (req.user) {
-        const courses = await storage.getStudentCourses(req.user.id);
-        return res.json(courses);
-      } else {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-    } catch (error) {
-      console.error("Error fetching courses:", error);
-      return res.status(500).json({ message: "Failed to fetch courses" });
-    }
-  });
-  
-  // Get all courses (for student enrollment)
-  app.get("/api/all-courses", ensureAuthenticated, async (req, res) => {
-    try {
-      // Only students should see this list for enrollment purposes
-      if (req.user && req.user.role !== "student") {
-        return res.status(403).json({ message: "Access denied" });
-      }
-      
-      // Get all courses from all admins
-      const courses = await storage.getAllCourses();
-      return res.json(courses);
-    } catch (error) {
-      console.error("Error fetching all courses:", error);
-      return res.status(500).json({ message: "Failed to fetch available courses" });
-    }
-  });
-  
-  app.post("/api/courses", ensureAdmin, async (req, res) => {
-    try {
-      console.log("Creating course with data:", req.body);
-      
-      if (!req.user || !req.user.id) {
-        console.error("User not properly authenticated in /api/courses");
-        return res.status(401).json({ message: "User not properly authenticated" });
-      }
-      
-      const courseData = insertCourseSchema.parse({
-        ...req.body,
-        adminId: req.user.id,
-      });
-      
-      console.log("Parsed course data:", courseData);
-      
-      const course = await storage.createCourse(courseData);
-      console.log("Course created successfully:", course);
-      return res.status(201).json(course);
-    } catch (error) {
-      console.error("Error creating course:", error);
-      if (error instanceof ZodError) {
-        const validationError = fromZodError(error);
-        return res.status(400).json({ message: validationError.message });
-      }
-      return res.status(500).json({ message: "Failed to create course", error: String(error) });
-    }
-  });
-  
-  app.get("/api/courses/:id", ensureAuthenticated, async (req, res) => {
-    try {
-      const courseId = parseInt(req.params.id);
-      const course = await storage.getCourse(courseId);
-      
-      if (!course) {
-        return res.status(404).json({ message: "Course not found" });
-      }
-      
-      // Check if user has access to this course
-      if (req.user.role === "admin" && course.adminId !== req.user.id) {
-        return res.status(403).json({ message: "Not authorized to access this course" });
-      }
-      
-      if (req.user.role === "student") {
-        const studentCourses = await storage.getStudentCourses(req.user.id);
-        if (!studentCourses.some(c => c.id === courseId)) {
-          return res.status(403).json({ message: "Not enrolled in this course" });
-        }
-      }
-      
-      return res.json(course);
-    } catch (error) {
-      return res.status(500).json({ message: "Error fetching course" });
-    }
-  });
-  
-  // Enrollment routes
-  app.post("/api/enrollments", ensureAuthenticated, async (req, res) => {
-    try {
-      const enrollmentData = insertStudentCourseSchema.parse(req.body);
-      
-      if (req.user.role === "admin") {
-        // Admin enrolling a student
-        
-        // Verify the course is owned by this admin
-        const course = await storage.getCourse(enrollmentData.courseId);
-        if (!course || course.adminId !== req.user.id) {
-          return res.status(403).json({ message: "Not authorized to enroll students in this course" });
-        }
-        
-        // Verify the student exists
-        const student = await storage.getUser(enrollmentData.studentId);
-        if (!student || student.role !== "student") {
-          return res.status(400).json({ message: "Invalid student ID" });
-        }
-        
-      } else if (req.user.role === "student") {
-        // Student self-enrolling
-        
-        // Only allow enrolling themselves
-        if (enrollmentData.studentId !== req.user.id) {
-          return res.status(403).json({ message: "You can only enroll yourself" });
-        }
-        
-        // Check that the course exists
-        const course = await storage.getCourse(enrollmentData.courseId);
-        if (!course) {
-          return res.status(404).json({ message: "Course not found" });
-        }
-        
-        // Check if student is already enrolled
-        const studentCourses = await storage.getStudentCourses(req.user.id);
-        if (studentCourses.some(c => c.id === enrollmentData.courseId)) {
-          return res.status(400).json({ message: "Already enrolled in this course" });
-        }
-      }
-      
-      const enrollment = await storage.enrollStudent(enrollmentData);
-      return res.status(201).json(enrollment);
-    } catch (error) {
-      if (error instanceof ZodError) {
-        const validationError = fromZodError(error);
-        return res.status(400).json({ message: validationError.message });
-      }
-      return res.status(500).json({ message: "Failed to enroll student" });
-    }
-  });
-  
-  app.get("/api/courses/:id/students", ensureAdmin, async (req, res) => {
-    try {
-      const courseId = parseInt(req.params.id);
-      
-      // Verify the course is owned by this admin
-      const course = await storage.getCourse(courseId);
-      if (!course || course.adminId !== req.user.id) {
-        return res.status(403).json({ message: "Not authorized to view students in this course" });
-      }
-      
-      const students = await storage.getEnrolledStudents(courseId);
+      const students = await storage.getAllStudents();
       return res.json(students);
     } catch (error) {
-      return res.status(500).json({ message: "Error fetching enrolled students" });
+      console.error("Error fetching students:", error);
+      return res.status(500).json({ message: "Failed to fetch students" });
     }
+  });
+  
+  // Course info
+  app.get("/api/course", ensureAuthenticated, async (req, res) => {
+    return res.json(DEFAULT_COURSE);
   });
   
   // Participation request routes (raise hand)
   app.post("/api/participation-requests", ensureAuthenticated, async (req, res) => {
     try {
-      if (req.user.role !== "student") {
+      if (req.user!.role !== "student") {
         return res.status(403).json({ message: "Only students can raise hands" });
       }
       
       const requestData = insertParticipationRequestSchema.parse({
         ...req.body,
-        studentId: req.user.id,
+        studentId: req.user!.id,
       });
       
-      // Verify student is enrolled in the course
-      const studentCourses = await storage.getStudentCourses(req.user.id);
-      if (!studentCourses.some(c => c.id === requestData.courseId)) {
-        return res.status(403).json({ message: "Not enrolled in this course" });
-      }
-      
-      // Check if student already has an active request for this course
-      const activeRequests = await storage.getActiveParticipationRequests(requestData.courseId);
-      const existingRequest = activeRequests.find(r => r.student.id === req.user.id);
+      // Check if student already has an active request
+      const activeRequests = await storage.getActiveParticipationRequests();
+      const existingRequest = activeRequests.find(r => r.student.id === req.user!.id);
       
       if (existingRequest) {
         return res.status(400).json({ message: "You already have an active participation request" });
@@ -311,15 +163,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const request = await storage.createParticipationRequest(requestData);
       
-      // Broadcast the new request to all clients in this course
-      broadcastToCourse(requestData.courseId, {
+      // Broadcast the new request to all clients
+      broadcastToAll({
         type: "participationRequest",
         payload: {
           ...request,
           student: {
-            id: req.user.id,
-            name: req.user.name,
-            username: req.user.username
+            id: req.user!.id,
+            name: req.user!.name,
+            username: req.user!.username
           }
         }
       });
@@ -334,24 +186,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.get("/api/courses/:id/participation-requests", ensureAuthenticated, async (req, res) => {
+  app.get("/api/participation-requests", ensureAuthenticated, async (req, res) => {
     try {
-      const courseId = parseInt(req.params.id);
-      
-      // Verify access to the course
-      if (req.user.role === "admin") {
-        const course = await storage.getCourse(courseId);
-        if (!course || course.adminId !== req.user.id) {
-          return res.status(403).json({ message: "Not authorized to view participation requests for this course" });
-        }
-      } else {
-        const studentCourses = await storage.getStudentCourses(req.user.id);
-        if (!studentCourses.some(c => c.id === courseId)) {
-          return res.status(403).json({ message: "Not enrolled in this course" });
-        }
-      }
-      
-      const requests = await storage.getActiveParticipationRequests(courseId);
+      const requests = await storage.getActiveParticipationRequests();
       return res.json(requests);
     } catch (error) {
       return res.status(500).json({ message: "Error fetching participation requests" });
@@ -368,21 +205,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Verify access to deactivate this request
-      if (req.user.role === "student" && request.studentId !== req.user.id) {
+      if (req.user!.role === "student" && request.studentId !== req.user!.id) {
         return res.status(403).json({ message: "Not authorized to deactivate this request" });
-      }
-      
-      if (req.user.role === "admin") {
-        const course = await storage.getCourse(request.courseId);
-        if (!course || course.adminId !== req.user.id) {
-          return res.status(403).json({ message: "Not authorized to deactivate this request" });
-        }
       }
       
       const updatedRequest = await storage.deactivateParticipationRequest(requestId);
       
-      // Broadcast the deactivation to all clients in this course
-      broadcastToCourse(request.courseId, {
+      // Broadcast the deactivation to all clients
+      broadcastToAll({
         type: "participationRequestDeactivated",
         payload: { id: requestId }
       });
@@ -398,16 +228,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const recordData = insertParticipationRecordSchema.parse(req.body);
       
-      // Verify the course is owned by this admin
-      const course = await storage.getCourse(recordData.courseId);
-      if (!course || course.adminId !== req.user.id) {
-        return res.status(403).json({ message: "Not authorized to award points for this course" });
-      }
-      
-      // Verify the student is enrolled in the course
-      const enrolledStudents = await storage.getEnrolledStudents(recordData.courseId);
-      if (!enrolledStudents.some(s => s.id === recordData.studentId)) {
-        return res.status(400).json({ message: "Student is not enrolled in this course" });
+      // Verify the student exists
+      const student = await storage.getUser(recordData.studentId);
+      if (!student || student.role !== "student") {
+        return res.status(400).json({ message: "Invalid student ID" });
       }
       
       const record = await storage.createParticipationRecord(recordData);
@@ -421,7 +245,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.deactivateParticipationRequest(requestId);
           
           // Broadcast deactivation
-          broadcastToCourse(recordData.courseId, {
+          broadcastToAll({
             type: "participationRequestDeactivated",
             payload: { id: requestId }
           });
@@ -429,11 +253,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Broadcast the new record
-      broadcastToCourse(recordData.courseId, {
+      broadcastToAll({
         type: "participationRecordCreated",
         payload: {
           ...record,
-          student: enrolledStudents.find(s => s.id === recordData.studentId)
+          student: {
+            id: student.id,
+            name: student.name,
+            username: student.username
+          }
         }
       });
       
@@ -447,26 +275,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.get("/api/courses/:id/participation-records", ensureAuthenticated, async (req, res) => {
+  app.get("/api/participation-records", ensureAuthenticated, async (req, res) => {
     try {
-      const courseId = parseInt(req.params.id);
-      
-      // Verify access to the course
-      if (req.user.role === "admin") {
-        const course = await storage.getCourse(courseId);
-        if (!course || course.adminId !== req.user.id) {
-          return res.status(403).json({ message: "Not authorized to view participation records for this course" });
-        }
-        
-        const records = await storage.getParticipationRecordsByCourse(courseId);
+      if (req.user!.role === "admin") {
+        const records = await storage.getAllParticipationRecords();
         return res.json(records);
       } else {
-        const studentCourses = await storage.getStudentCourses(req.user.id);
-        if (!studentCourses.some(c => c.id === courseId)) {
-          return res.status(403).json({ message: "Not enrolled in this course" });
-        }
-        
-        const records = await storage.getParticipationRecordsByStudent(req.user.id, courseId);
+        const records = await storage.getParticipationRecordsByStudent(req.user!.id);
         return res.json(records);
       }
     } catch (error) {
@@ -474,27 +289,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.get("/api/courses/:id/students/:studentId/points", ensureAuthenticated, async (req, res) => {
+  app.get("/api/students/:id/participation-records", ensureAdmin, async (req, res) => {
     try {
-      const courseId = parseInt(req.params.id);
-      const studentId = parseInt(req.params.studentId);
+      const studentId = parseInt(req.params.id);
+      const student = await storage.getUser(studentId);
       
-      // Verify access to the course
-      if (req.user.role === "admin") {
-        const course = await storage.getCourse(courseId);
-        if (!course || course.adminId !== req.user.id) {
-          return res.status(403).json({ message: "Not authorized to view points for this course" });
-        }
-      } else if (req.user.id !== studentId) {
+      if (!student || student.role !== "student") {
+        return res.status(404).json({ message: "Student not found" });
+      }
+      
+      const records = await storage.getParticipationRecordsByStudent(studentId);
+      return res.json(records);
+    } catch (error) {
+      return res.status(500).json({ message: "Error fetching student participation records" });
+    }
+  });
+  
+  app.get("/api/students/:id/participation-points", ensureAuthenticated, async (req, res) => {
+    try {
+      const studentId = parseInt(req.params.id);
+      
+      // Students can only view their own points
+      if (req.user!.role === "student" && req.user!.id !== studentId) {
         return res.status(403).json({ message: "Not authorized to view other student's points" });
       }
       
-      const points = await storage.getTotalParticipationPointsByStudent(studentId, courseId);
-      return res.json({ points });
+      const points = await storage.getTotalParticipationPointsByStudent(studentId);
+      return res.json({ studentId, points });
     } catch (error) {
       return res.status(500).json({ message: "Error fetching participation points" });
     }
   });
-
+  
   return httpServer;
 }

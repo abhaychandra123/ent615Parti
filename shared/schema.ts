@@ -20,76 +20,57 @@ export const insertUserSchema = createInsertSchema(users).pick({
   role: true,
 });
 
-// Course model
-export const courses = pgTable("courses", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  description: text("description"),
-  adminId: integer("admin_id").notNull(), // The professor/TA who owns this course
-});
-
-export const insertCourseSchema = createInsertSchema(courses).pick({
-  name: true,
-  description: true,
-  adminId: true,
-});
-
-// StudentCourse relation (for enrolling students in courses)
-export const studentCourses = pgTable("student_courses", {
-  id: serial("id").primaryKey(),
-  studentId: integer("student_id").notNull(),
-  courseId: integer("course_id").notNull(),
-});
-
-export const insertStudentCourseSchema = createInsertSchema(studentCourses).pick({
-  studentId: true,
-  courseId: true,
-});
+// Default course constant - the only course used in the application
+export const DEFAULT_COURSE = {
+  id: 1,
+  name: "ENT615: Strategy and Leadership for Entrepreneurs",
+  description: "This course explores the strategic frameworks and leadership principles essential for entrepreneurial success."
+};
 
 // ParticipationRequest model (for raised hands)
 export const participationRequests = pgTable("participation_requests", {
   id: serial("id").primaryKey(),
   studentId: integer("student_id").notNull(),
-  courseId: integer("course_id").notNull(),
+  courseId: integer("course_id").notNull().default(DEFAULT_COURSE.id),
   note: text("note"),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
   active: boolean("active").notNull().default(true),
 });
 
-export const insertParticipationRequestSchema = createInsertSchema(participationRequests).pick({
-  studentId: true,
-  courseId: true,
-  note: true,
-});
+export const insertParticipationRequestSchema = createInsertSchema(participationRequests)
+  .omit({ courseId: true })
+  .merge(z.object({
+    note: z.string().optional()
+  }));
 
 // ParticipationRecord model (for assigned points)
 export const participationRecords = pgTable("participation_records", {
   id: serial("id").primaryKey(),
   studentId: integer("student_id").notNull(),
-  courseId: integer("course_id").notNull(),
+  courseId: integer("course_id").notNull().default(DEFAULT_COURSE.id),
   points: integer("points").notNull(),
   feedback: text("feedback"),
   note: text("note"),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
 });
 
-export const insertParticipationRecordSchema = createInsertSchema(participationRecords).pick({
-  studentId: true,
-  courseId: true,
-  points: true,
-  feedback: true,
-  note: true,
-});
+export const insertParticipationRecordSchema = createInsertSchema(participationRecords)
+  .omit({ courseId: true })
+  .merge(z.object({
+    feedback: z.string().optional(),
+    note: z.string().optional()
+  }));
 
 // Type exports
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-export type InsertCourse = z.infer<typeof insertCourseSchema>;
-export type Course = typeof courses.$inferSelect;
-
-export type InsertStudentCourse = z.infer<typeof insertStudentCourseSchema>;
-export type StudentCourse = typeof studentCourses.$inferSelect;
+// We maintain a Course type for compatibility
+export type Course = {
+  id: number;
+  name: string;
+  description: string;
+};
 
 export type InsertParticipationRequest = z.infer<typeof insertParticipationRequestSchema>;
 export type ParticipationRequest = typeof participationRequests.$inferSelect;

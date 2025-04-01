@@ -5,7 +5,7 @@ type WebSocketContextType = {
   connected: boolean;
   sendMessage: (type: string, payload: any) => void;
   subscribe: (type: string, callback: (payload: any) => void) => () => void;
-  connect: (courseId: number) => void;
+  connect: () => void;
   disconnect: () => void;
 };
 
@@ -28,10 +28,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const subscriptionsRef = useRef<Subscription[]>([]);
   const reconnectTimeoutRef = useRef<any>(null);
   const pingIntervalRef = useRef<any>(null);
-  const courseIdRef = useRef<number | null>(null);
 
   // Function to create a new WebSocket connection
-  const createWebSocket = (courseId: number) => {
+  const createWebSocket = () => {
     // Close existing connection if any
     if (webSocketRef.current) {
       console.log("Closing existing WebSocket connection");
@@ -50,7 +49,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         throw new Error("Invalid hostname for WebSocket connection");
       }
       
-      console.log(`Attempting to connect to WebSocket at ${wsUrl} for course ${courseId}`);
+      console.log(`Attempting to connect to WebSocket at ${wsUrl}`);
       console.log(`Current location: ${window.location.href}`);
       
       // Create the WebSocket connection
@@ -61,15 +60,16 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       socket.addEventListener("open", (event) => {
         console.log("WebSocket connection established:", event);
         setConnected(true);
-        courseIdRef.current = courseId;
         
-        // Send initial message with course ID
-        const joinMessage = {
-          type: "join",
-          payload: { courseId, userId: user?.id }
-        };
-        console.log("Sending join message:", joinMessage);
-        socket.send(JSON.stringify(joinMessage));
+        // Send initial message with user ID
+        if (user) {
+          const joinMessage = {
+            type: "join",
+            payload: { userId: user.id }
+          };
+          console.log("Sending join message:", joinMessage);
+          socket.send(JSON.stringify(joinMessage));
+        }
         
         // Set up ping interval to keep connection alive
         clearInterval(pingIntervalRef.current);
@@ -96,7 +96,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           
           // Handle join confirmation
           if (message.type === "joinConfirmed") {
-            console.log("Successfully joined course room:", message.payload);
+            console.log("Successfully joined WebSocket room:", message.payload);
           }
           
           // Notify all subscribed callbacks for this message type
@@ -121,15 +121,13 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         setConnected(false);
         clearInterval(pingIntervalRef.current);
         
-        // Try to reconnect if we have a courseId
-        if (courseIdRef.current !== null) {
-          console.log(`Will attempt to reconnect to course ${courseIdRef.current} in 3 seconds`);
-          clearTimeout(reconnectTimeoutRef.current);
-          reconnectTimeoutRef.current = setTimeout(() => {
-            console.log("Attempting reconnection...");
-            createWebSocket(courseIdRef.current!);
-          }, 3000);
-        }
+        // Try to reconnect
+        console.log("Will attempt to reconnect in 3 seconds");
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = setTimeout(() => {
+          console.log("Attempting reconnection...");
+          createWebSocket();
+        }, 3000);
       });
 
       // Connection error
@@ -145,10 +143,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Connect to WebSocket with a course ID
-  const connect = (courseId: number) => {
-    courseIdRef.current = courseId;
-    createWebSocket(courseId);
+  // Connect to WebSocket
+  const connect = () => {
+    createWebSocket();
   };
   
   // Disconnect from WebSocket
@@ -160,7 +157,6 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     
     clearTimeout(reconnectTimeoutRef.current);
     clearInterval(pingIntervalRef.current);
-    courseIdRef.current = null;
     setConnected(false);
   };
 

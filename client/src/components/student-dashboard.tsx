@@ -10,7 +10,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Course, ParticipationRecord } from "@shared/schema";
 import { format } from "date-fns";
 import { Hand as HandIcon, Check as CheckIcon } from "lucide-react";
-import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 
 type StudentDashboardProps = {
@@ -24,24 +23,22 @@ export default function StudentDashboard({ selectedCourse }: StudentDashboardPro
   const [handRaised, setHandRaised] = useState(false);
   const [raisedTime, setRaisedTime] = useState<Date | null>(null);
   const [requestId, setRequestId] = useState<number | null>(null);
-  const { connect, disconnect, subscribe } = useWebSocket();
+  const { subscribe } = useWebSocket();
   
   // Get student participation records
   const { data: participationRecords, isLoading: recordsLoading } = useQuery<ParticipationRecord[]>({
-    queryKey: ["/api/courses", selectedCourse.id, "participation-records"],
-    enabled: !!selectedCourse.id,
+    queryKey: ["/api/participation-records"],
   });
   
   // Total points
   const { data: pointsData } = useQuery<{ points: number }>({
-    queryKey: ["/api/courses", selectedCourse.id, "students", user?.id, "points"],
-    enabled: !!selectedCourse.id && !!user?.id,
+    queryKey: ["/api/students", user?.id, "participation-points"],
+    enabled: !!user?.id,
   });
   
   // Get active participation requests to check if student already has one
   const { data: participationRequests } = useQuery<any[]>({
-    queryKey: ["/api/courses", selectedCourse.id, "participation-requests"],
-    enabled: !!selectedCourse.id,
+    queryKey: ["/api/participation-requests"],
   });
   
   // Check if student already has an active request when loading the page
@@ -52,6 +49,7 @@ export default function StudentDashboard({ selectedCourse }: StudentDashboardPro
         setHandRaised(true);
         setRequestId(activeRequest.id);
         setRaisedTime(new Date(activeRequest.timestamp));
+        setNote(activeRequest.note || "");
       }
     }
   }, [participationRequests, user]);
@@ -60,7 +58,6 @@ export default function StudentDashboard({ selectedCourse }: StudentDashboardPro
   const raiseHandMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/participation-requests", {
-        courseId: selectedCourse.id,
         note: note.trim() || undefined
       });
       return await res.json();
@@ -76,7 +73,7 @@ export default function StudentDashboard({ selectedCourse }: StudentDashboardPro
       });
       
       // Invalidate participation requests cache
-      queryClient.invalidateQueries({ queryKey: ["/api/courses", selectedCourse.id, "participation-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/participation-requests"] });
     },
     onError: (error: Error) => {
       toast({
@@ -106,7 +103,7 @@ export default function StudentDashboard({ selectedCourse }: StudentDashboardPro
       });
       
       // Invalidate participation requests cache
-      queryClient.invalidateQueries({ queryKey: ["/api/courses", selectedCourse.id, "participation-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/participation-requests"] });
     },
     onError: (error: Error) => {
       toast({
@@ -117,36 +114,31 @@ export default function StudentDashboard({ selectedCourse }: StudentDashboardPro
     },
   });
   
-  // Connect to WebSocket when course is selected
+  // Subscribe to WebSocket events
   useEffect(() => {
-    if (selectedCourse.id) {
-      connect(selectedCourse.id);
-      
-      // Subscribe to participation request deactivations
-      const unsubscribe = subscribe("participationRequestDeactivated", (payload: { id: number }) => {
-        if (payload.id === requestId) {
-          setHandRaised(false);
-          setRequestId(null);
-          setRaisedTime(null);
-          setNote("");
-          
-          toast({
-            title: "Participation Acknowledged",
-            description: "Your participation request has been processed.",
-          });
-          
-          // Refresh participation records
-          queryClient.invalidateQueries({ queryKey: ["/api/courses", selectedCourse.id, "participation-records"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/courses", selectedCourse.id, "students", user?.id, "points"] });
-        }
-      });
-      
-      return () => {
-        unsubscribe();
-        disconnect();
-      };
-    }
-  }, [selectedCourse.id, requestId, user?.id]);
+    // Subscribe to participation request deactivations
+    const unsubscribe = subscribe("participationRequestDeactivated", (payload: { id: number }) => {
+      if (payload.id === requestId) {
+        setHandRaised(false);
+        setRequestId(null);
+        setRaisedTime(null);
+        setNote("");
+        
+        toast({
+          title: "Participation Acknowledged",
+          description: "Your participation request has been processed.",
+        });
+        
+        // Refresh participation records
+        queryClient.invalidateQueries({ queryKey: ["/api/participation-records"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/students", user?.id, "participation-points"] });
+      }
+    });
+    
+    return () => {
+      unsubscribe();
+    };
+  }, [requestId, user?.id, subscribe, toast]);
   
   // Handle raise hand button click
   const handleRaiseHand = () => {
@@ -160,8 +152,6 @@ export default function StudentDashboard({ selectedCourse }: StudentDashboardPro
   
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-medium mb-4">{selectedCourse.name}</h2>
-      
       {/* Hand raising section */}
       <Card className="text-center">
         <CardHeader>
@@ -172,19 +162,25 @@ export default function StudentDashboard({ selectedCourse }: StudentDashboardPro
             Click below to raise your hand and participate in the current discussion
           </p>
           
-          {!handRaised && (
-            <Button 
-              size="lg" 
-              className="mb-4 rounded-full px-6"
-              onClick={handleRaiseHand}
-              disabled={raiseHandMutation.isPending}
-            >
-              <HandIcon className="mr-2 h-5 w-5" />
-              {raiseHandMutation.isPending ? "Raising Hand..." : "Raise Hand"}
-            </Button>
-          )}
-          
-          {handRaised && (
+          {!handRaised ? (
+            <div>
+              <Input
+                placeholder="Add a note (optional)"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className="mb-4 max-w-md mx-auto"
+              />
+              <Button 
+                size="lg" 
+                className="rounded-full px-6"
+                onClick={handleRaiseHand}
+                disabled={raiseHandMutation.isPending}
+              >
+                <HandIcon className="mr-2 h-5 w-5" />
+                {raiseHandMutation.isPending ? "Raising Hand..." : "Raise Hand"}
+              </Button>
+            </div>
+          ) : (
             <div className="w-full max-w-md mx-auto">
               <div className="bg-muted p-3 rounded-md mb-3">
                 <div className="flex justify-between items-center text-sm mb-2">
@@ -193,13 +189,11 @@ export default function StudentDashboard({ selectedCourse }: StudentDashboardPro
                     {raisedTime && format(raisedTime, "h:mm a")}
                   </span>
                 </div>
-                <Input
-                  placeholder="Add context (optional)"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  disabled
-                  className="mt-1"
-                />
+                {note && (
+                  <div className="bg-background p-2 rounded text-sm">
+                    <p className="text-left">{note}</p>
+                  </div>
+                )}
               </div>
               <Button 
                 variant="destructive" 
