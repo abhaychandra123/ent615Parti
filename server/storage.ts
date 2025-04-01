@@ -9,6 +9,7 @@ import {
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
+import { DatabaseStorage } from './database-storage';
 
 const MemoryStore = createMemoryStore(session);
 
@@ -42,7 +43,7 @@ export interface IStorage {
   getTotalParticipationPointsByStudent(studentId: number, courseId: number): Promise<number>;
   
   // Session store
-  sessionStore: session.SessionStore;
+  sessionStore: session.Store;
 }
 
 export class MemStorage implements IStorage {
@@ -52,7 +53,7 @@ export class MemStorage implements IStorage {
   private participationRequests: Map<number, ParticipationRequest>;
   private participationRecords: Map<number, ParticipationRecord>;
   
-  sessionStore: session.SessionStore;
+  sessionStore: session.Store;
   
   userCurrentId: number;
   courseCurrentId: number;
@@ -91,7 +92,12 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.userCurrentId++;
-    const user: User = { ...insertUser, id };
+    // Ensure role is set to 'student' by default if not provided
+    const userWithRole = { 
+      ...insertUser, 
+      role: insertUser.role || 'student' 
+    };
+    const user: User = { ...userWithRole, id };
     this.users.set(id, user);
     return user;
   }
@@ -113,7 +119,12 @@ export class MemStorage implements IStorage {
   
   async createCourse(insertCourse: InsertCourse): Promise<Course> {
     const id = this.courseCurrentId++;
-    const course: Course = { ...insertCourse, id };
+    // Handle null description
+    const courseWithDescription = {
+      ...insertCourse,
+      description: insertCourse.description ?? null
+    };
+    const course: Course = { ...courseWithDescription, id };
     this.courses.set(id, course);
     return course;
   }
@@ -150,7 +161,13 @@ export class MemStorage implements IStorage {
   async createParticipationRequest(insertRequest: InsertParticipationRequest): Promise<ParticipationRequest> {
     const id = this.participationRequestCurrentId++;
     const timestamp = new Date();
-    const request: ParticipationRequest = { ...insertRequest, id, timestamp, active: true };
+    const requestWithNull = {
+      ...insertRequest,
+      note: insertRequest.note ?? null,
+      active: true,
+      timestamp
+    };
+    const request: ParticipationRequest = { ...requestWithNull, id };
     this.participationRequests.set(id, request);
     return request;
   }
@@ -198,7 +215,13 @@ export class MemStorage implements IStorage {
   async createParticipationRecord(insertRecord: InsertParticipationRecord): Promise<ParticipationRecord> {
     const id = this.participationRecordCurrentId++;
     const timestamp = new Date();
-    const record: ParticipationRecord = { ...insertRecord, id, timestamp };
+    const recordWithNulls = {
+      ...insertRecord,
+      note: insertRecord.note ?? null,
+      feedback: insertRecord.feedback ?? null,
+      timestamp
+    };
+    const record: ParticipationRecord = { ...recordWithNulls, id };
     this.participationRecords.set(id, record);
     return record;
   }
@@ -242,4 +265,5 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Export database storage instance
+export const storage = new DatabaseStorage();
