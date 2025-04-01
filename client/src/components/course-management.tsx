@@ -59,6 +59,14 @@ export function CreateCourse() {
       try {
         console.log("Sending course data to API:", data);
         const res = await apiRequest("POST", "/api/courses", data);
+        
+        // Check if the response is OK
+        if (!res.ok) {
+          const errorData = await res.json();
+          console.error("Server error:", errorData);
+          throw new Error(errorData.message || "Failed to create course");
+        }
+        
         const result = await res.json();
         console.log("Course creation API response:", result);
         return result;
@@ -81,79 +89,81 @@ export function CreateCourse() {
       console.error("Course creation error:", error);
       toast({
         title: "Failed to create course",
-        description: error.message,
+        description: error.message || "An unknown error occurred",
         variant: "destructive",
       });
     },
   });
 
   function onSubmit(data: CreateCourseFormData) {
+    console.log("Submitting form with data:", data);
     createCourseMutation.mutate(data);
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button className="gap-2">
-          <PlusCircle className="h-4 w-4" />
-          Create Course
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Create a New Course</DialogTitle>
-          <DialogDescription>
-            Create a course for your students to join. All courses you create will be visible to students.
-          </DialogDescription>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Course Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Introduction to Computer Science" {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    The name of your course as it will appear to students.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description (Optional)</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Provide a brief description of the course"
-                      className="resize-none"
-                      {...field}
-                      value={field.value || ""}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    A brief description of the course content and objectives.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <DialogFooter>
-              <Button type="submit" disabled={createCourseMutation.isPending}>
-                {createCourseMutation.isPending ? "Creating..." : "Create Course"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+    <>
+      <Button className="gap-2" onClick={() => setIsOpen(true)}>
+        <PlusCircle className="h-4 w-4" />
+        Create Course
+      </Button>
+      
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Create a New Course</DialogTitle>
+            <DialogDescription>
+              Create a course for your students to join. All courses you create will be visible to students.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Course Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Introduction to Computer Science" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      The name of your course as it will appear to students.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Provide a brief description of the course"
+                        className="resize-none"
+                        {...field}
+                        value={field.value || ""}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      A brief description of the course content and objectives.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="submit" disabled={createCourseMutation.isPending}>
+                  {createCourseMutation.isPending ? "Creating..." : "Create Course"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -188,11 +198,27 @@ export function JoinCourse() {
 
   const enrollCourseMutation = useMutation({
     mutationFn: async (data: EnrollCourseFormData) => {
-      const res = await apiRequest("POST", "/api/enrollments", {
-        studentId: user?.id,
-        courseId: parseInt(data.courseId),
-      });
-      return await res.json();
+      try {
+        console.log("Sending enrollment data to API:", data);
+        const res = await apiRequest("POST", "/api/enrollments", {
+          studentId: user?.id,
+          courseId: parseInt(data.courseId),
+        });
+        
+        // Check if the response is OK
+        if (!res.ok) {
+          const errorData = await res.json();
+          console.error("Server error:", errorData);
+          throw new Error(errorData.message || "Failed to join course");
+        }
+        
+        const result = await res.json();
+        console.log("Course enrollment API response:", result);
+        return result;
+      } catch (error) {
+        console.error("Error in enrollCourseMutation:", error);
+        throw error;
+      }
     },
     onSuccess: () => {
       setIsOpen(false);
@@ -204,9 +230,10 @@ export function JoinCourse() {
       });
     },
     onError: (error: Error) => {
+      console.error("Course enrollment error:", error);
       toast({
         title: "Failed to join course",
-        description: error.message,
+        description: error.message || "An unknown error occurred",
         variant: "destructive",
       });
     },
@@ -222,71 +249,72 @@ export function JoinCourse() {
   );
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button className="gap-2">
-          <LogIn className="h-4 w-4" />
-          Join Course
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Join a Course</DialogTitle>
-          <DialogDescription>
-            Select a course to join from the list of available courses.
-          </DialogDescription>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="courseId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Available Courses</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a course to join" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {isLoading ? (
-                        <SelectItem value="loading" disabled>
-                          Loading courses...
-                        </SelectItem>
-                      ) : filteredCourses && filteredCourses.length > 0 ? (
-                        filteredCourses.map((course) => (
-                          <SelectItem key={course.id} value={String(course.id)}>
-                            {course.name}
+    <>
+      <Button className="gap-2" onClick={() => setIsOpen(true)}>
+        <LogIn className="h-4 w-4" />
+        Join Course
+      </Button>
+      
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Join a Course</DialogTitle>
+            <DialogDescription>
+              Select a course to join from the list of available courses.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="courseId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Available Courses</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a course to join" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {isLoading ? (
+                          <SelectItem value="loading" disabled>
+                            Loading courses...
                           </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="none" disabled>
-                          No available courses to join
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>
-                    Choose from the list of courses you can join.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <DialogFooter>
-              <Button
-                type="submit"
-                disabled={enrollCourseMutation.isPending || !filteredCourses || filteredCourses.length === 0}
-              >
-                {enrollCourseMutation.isPending ? "Joining..." : "Join Course"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+                        ) : filteredCourses && filteredCourses.length > 0 ? (
+                          filteredCourses.map((course) => (
+                            <SelectItem key={course.id} value={String(course.id)}>
+                              {course.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="none" disabled>
+                            No available courses to join
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Choose from the list of courses you can join.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button
+                  type="submit"
+                  disabled={enrollCourseMutation.isPending || !filteredCourses || filteredCourses.length === 0}
+                >
+                  {enrollCourseMutation.isPending ? "Joining..." : "Join Course"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
