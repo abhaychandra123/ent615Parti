@@ -226,7 +226,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Participation record routes (award points)
   app.post("/api/participation-records", ensureAdmin, async (req, res) => {
     try {
-      const recordData = insertParticipationRecordSchema.parse(req.body);
+      console.log("Received participation record request:", req.body);
+      
+      // Extract requestId before validation as it's not part of the schema
+      const requestId = req.body.requestId ? parseInt(req.body.requestId) : null;
+      
+      // Only pass schema-valid fields to parser
+      const { studentId, points, feedback, note } = req.body;
+      const recordData = insertParticipationRecordSchema.parse({
+        studentId,
+        points,
+        feedback,
+        note
+      });
       
       // Verify the student exists
       const student = await storage.getUser(recordData.studentId);
@@ -237,8 +249,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const record = await storage.createParticipationRecord(recordData);
       
       // If this is tied to a participation request, deactivate it
-      if (req.body.requestId) {
-        const requestId = parseInt(req.body.requestId);
+      if (requestId) {
         const request = await storage.getParticipationRequestById(requestId);
         
         if (request && request.active) {
@@ -267,6 +278,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       return res.status(201).json(record);
     } catch (error) {
+      console.error("Error creating participation record:", error);
       if (error instanceof ZodError) {
         const validationError = fromZodError(error);
         return res.status(400).json({ message: validationError.message });
