@@ -10,13 +10,7 @@ import {
 import session from "express-session";
 import { IStorage } from "./storage";
 import connectPg from "connect-pg-simple";
-import pg from "pg";
-const { Pool } = pg;
-
-// Connect to PostgreSQL directly
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+import pool from "./db";
 
 const PostgresSessionStore = connectPg(session);
 
