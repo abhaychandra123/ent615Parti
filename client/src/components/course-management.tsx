@@ -56,10 +56,19 @@ export function CreateCourse() {
 
   const createCourseMutation = useMutation({
     mutationFn: async (data: CreateCourseFormData) => {
-      const res = await apiRequest("POST", "/api/courses", data);
-      return await res.json();
+      try {
+        console.log("Sending course data to API:", data);
+        const res = await apiRequest("POST", "/api/courses", data);
+        const result = await res.json();
+        console.log("Course creation API response:", result);
+        return result;
+      } catch (error) {
+        console.error("Error in createCourseMutation:", error);
+        throw error;
+      }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("Course created successfully:", data);
       setIsOpen(false);
       form.reset();
       queryClient.invalidateQueries({ queryKey: ["/api/courses"] });
@@ -69,6 +78,7 @@ export function CreateCourse() {
       });
     },
     onError: (error: Error) => {
+      console.error("Course creation error:", error);
       toast({
         title: "Failed to create course",
         description: error.message,

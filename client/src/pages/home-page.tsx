@@ -5,7 +5,7 @@ import { Course } from "@shared/schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
-import { WebSocketProvider } from "@/lib/websocket";
+import { useWebSocket } from "@/lib/websocket";
 import StudentDashboard from "@/components/student-dashboard";
 import AdminDashboard from "@/components/admin-dashboard";
 import { CreateCourse, JoinCourse, NoCourses } from "@/components/course-management";
@@ -42,8 +42,19 @@ export default function HomePage() {
     return <NoCourses />;
   }
   
+  // Use the websocket hook
+  const { connect } = useWebSocket();
+  
+  // Connect to the WebSocket when the selected course changes
+  useEffect(() => {
+    if (selectedCourse) {
+      console.log("Connecting to WebSocket for course:", selectedCourse.id);
+      connect(selectedCourse.id);
+    }
+  }, [selectedCourse, connect]);
+  
   return (
-    <WebSocketProvider>
+    <>
       {/* Course selector with management buttons */}
       <div className="mb-6 flex justify-between items-end">
         <div>
@@ -84,6 +95,6 @@ export default function HomePage() {
           )}
         </>
       )}
-    </WebSocketProvider>
+    </>
   );
 }

@@ -3,9 +3,18 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
-import { insertCourseSchema, insertStudentCourseSchema, insertParticipationRequestSchema, insertParticipationRecordSchema } from "@shared/schema";
+import { insertCourseSchema, insertStudentCourseSchema, insertParticipationRequestSchema, insertParticipationRecordSchema, User } from "@shared/schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
+
+// Extend Express Request to ensure req.user is defined after authentication middleware
+declare global {
+  namespace Express {
+    interface Request {
+      user?: User;
+    }
+  }
+}
 
 // Middleware to ensure user is authenticated
 const ensureAuthenticated = (req: Request, res: Response, next: Function) => {
@@ -17,7 +26,7 @@ const ensureAuthenticated = (req: Request, res: Response, next: Function) => {
 
 // Middleware to ensure user is an admin
 const ensureAdmin = (req: Request, res: Response, next: Function) => {
-  if (req.isAuthenticated() && req.user.role === "admin") {
+  if (req.isAuthenticated() && req.user && req.user.role === "admin") {
     return next();
   }
   res.status(403).json({ message: "Forbidden: Admin access required" });
@@ -86,12 +95,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Course routes
   app.get("/api/courses", ensureAuthenticated, async (req, res) => {
     try {
-      if (req.user.role === "admin") {
+      if (req.user && req.user.role === "admin") {
         const courses = await storage.getCoursesByAdmin(req.user.id);
         return res.json(courses);
-      } else {
+      } else if (req.user) {
         const courses = await storage.getStudentCourses(req.user.id);
         return res.json(courses);
+      } else {
+        return res.status(401).json({ message: "Unauthorized" });
       }
     } catch (error) {
       console.error("Error fetching courses:", error);
@@ -103,7 +114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/all-courses", ensureAuthenticated, async (req, res) => {
     try {
       // Only students should see this list for enrollment purposes
-      if (req.user.role !== "student") {
+      if (req.user && req.user.role !== "student") {
         return res.status(403).json({ message: "Access denied" });
       }
       
@@ -118,19 +129,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.post("/api/courses", ensureAdmin, async (req, res) => {
     try {
+      console.log("Creating course with data:", req.body);
+      
+      if (!req.user || !req.user.id) {
+        console.error("User not properly authenticated in /api/courses");
+        return res.status(401).json({ message: "User not properly authenticated" });
+      }
+      
       const courseData = insertCourseSchema.parse({
         ...req.body,
         adminId: req.user.id,
       });
       
+      console.log("Parsed course data:", courseData);
+      
       const course = await storage.createCourse(courseData);
+      console.log("Course created successfully:", course);
       return res.status(201).json(course);
     } catch (error) {
+      console.error("Error creating course:", error);
       if (error instanceof ZodError) {
         const validationError = fromZodError(error);
         return res.status(400).json({ message: validationError.message });
       }
-      return res.status(500).json({ message: "Failed to create course" });
+      return res.status(500).json({ message: "Failed to create course", error: String(error) });
     }
   });
   
