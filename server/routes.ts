@@ -19,6 +19,7 @@ declare global {
 // Middleware to ensure user is authenticated
 const ensureAuthenticated = (req: Request, res: Response, next: Function) => {
   if (req.isAuthenticated()) {
+    // TypeScript: After this middleware, req.user is guaranteed to be defined
     return next();
   }
   res.status(401).json({ message: "Unauthorized" });
@@ -27,6 +28,7 @@ const ensureAuthenticated = (req: Request, res: Response, next: Function) => {
 // Middleware to ensure user is an admin
 const ensureAdmin = (req: Request, res: Response, next: Function) => {
   if (req.isAuthenticated() && req.user && req.user.role === "admin") {
+    // TypeScript: After this middleware, req.user is guaranteed to be defined and an admin
     return next();
   }
   res.status(403).json({ message: "Forbidden: Admin access required" });
@@ -44,6 +46,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
   // Set up WebSocket server for real-time updates
+  console.log("Setting up WebSocket server on path /ws");
   const wss = new WebSocketServer({ 
     server: httpServer, 
     path: "/ws",
@@ -51,14 +54,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // WebSocket connection handler
-  wss.on("connection", (ws) => {
-    console.log("WebSocket client connected");
+  wss.on("connection", (ws, req) => {
+    console.log("WebSocket client connected", req.headers.origin);
+    
+    // Send a welcome message to verify the connection works
+    try {
+      ws.send(JSON.stringify({ type: "welcome", payload: { message: "Connected to ClassTrack WebSocket server" } }));
+    } catch (error) {
+      console.error("Error sending welcome message:", error);
+    }
     
     ws.on("message", async (message) => {
       try {
+        console.log("WebSocket received message:", message.toString());
         const parsedMessage = JSON.parse(message.toString()) as WebSocketMessage;
         
         if (parsedMessage.type === "ping") {
+          console.log("Received ping, sending pong");
           ws.send(JSON.stringify({ type: "pong" }));
           return;
         }
@@ -68,6 +80,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Store course ID with the connection
           (ws as any).courseData = { courseId, userId };
           console.log(`User ${userId} joined course ${courseId} WebSocket room`);
+          
+          // Confirm the join
+          ws.send(JSON.stringify({ 
+            type: "joinConfirmed", 
+            payload: { courseId, userId, message: "Successfully joined course WebSocket room" } 
+          }));
           return;
         }
       } catch (error) {
@@ -75,9 +93,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
     
-    ws.on("close", () => {
-      console.log("WebSocket client disconnected");
+    ws.on("error", (error) => {
+      console.error("WebSocket error:", error);
     });
+    
+    ws.on("close", (code, reason) => {
+      console.log("WebSocket client disconnected", code, reason.toString());
+    });
+  });
+  
+  // Log any server-level errors
+  wss.on("error", (error) => {
+    console.error("WebSocket server error:", error);
   });
   
   // Broadcast to all clients in a specific course

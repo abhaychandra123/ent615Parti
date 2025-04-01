@@ -1,19 +1,41 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Course } from "@shared/schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
-import { useWebSocket } from "@/lib/websocket";
+import { WebSocketProvider, useWebSocket } from "@/lib/websocket";
 import StudentDashboard from "@/components/student-dashboard";
 import AdminDashboard from "@/components/admin-dashboard";
 import { CreateCourse, JoinCourse, NoCourses } from "@/components/course-management";
-import { Button } from "@/components/ui/button";
 
-export default function HomePage() {
+// Component that manages WebSocket connection for a specific course
+function CourseWithWebSocket({ 
+  selectedCourse, 
+  children 
+}: { 
+  selectedCourse: Course;
+  children: React.ReactNode; 
+}) {
+  // Use the websocket hook
+  const { connect } = useWebSocket();
+  
+  // Connect to the WebSocket when the selected course changes
+  useEffect(() => {
+    if (selectedCourse) {
+      console.log("Connecting to WebSocket for course:", selectedCourse.id);
+      connect(selectedCourse.id);
+    }
+  }, [selectedCourse, connect]);
+  
+  return <>{children}</>;
+}
+
+function HomePageContent() {
   const { user } = useAuth();
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
+  const queryClient = useQueryClient();
   
   // Fetch courses
   const { data: courses, isLoading: coursesLoading } = useQuery<Course[]>({
@@ -41,17 +63,6 @@ export default function HomePage() {
   if (!courses || courses.length === 0) {
     return <NoCourses />;
   }
-  
-  // Use the websocket hook
-  const { connect } = useWebSocket();
-  
-  // Connect to the WebSocket when the selected course changes
-  useEffect(() => {
-    if (selectedCourse) {
-      console.log("Connecting to WebSocket for course:", selectedCourse.id);
-      connect(selectedCourse.id);
-    }
-  }, [selectedCourse, connect]);
   
   return (
     <>
@@ -87,14 +98,23 @@ export default function HomePage() {
       </div>
       
       {selectedCourse && (
-        <>
+        <CourseWithWebSocket selectedCourse={selectedCourse}>
           {user?.role === "admin" ? (
             <AdminDashboard selectedCourse={selectedCourse} />
           ) : (
             <StudentDashboard selectedCourse={selectedCourse} />
           )}
-        </>
+        </CourseWithWebSocket>
       )}
     </>
+  );
+}
+
+// Main component with WebSocket provider
+export default function HomePage() {
+  return (
+    <WebSocketProvider>
+      <HomePageContent />
+    </WebSocketProvider>
   );
 }

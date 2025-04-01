@@ -8,6 +8,7 @@ import HomePage from "@/pages/home-page";
 import { ProtectedRoute } from "@/lib/protected-route";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
+import { AuthProvider } from "@/hooks/use-auth";
 
 function Router() {
   return (
@@ -28,8 +29,10 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Router />
-      <Toaster />
+      <AuthProvider>
+        <Router />
+        <Toaster />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

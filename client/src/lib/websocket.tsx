@@ -34,6 +34,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const createWebSocket = (courseId: number) => {
     // Close existing connection if any
     if (webSocketRef.current) {
+      console.log("Closing existing WebSocket connection");
       webSocketRef.current.close();
     }
 
@@ -48,32 +49,55 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       if (!wsHost) {
         throw new Error("Invalid hostname for WebSocket connection");
       }
-      console.log(`Connecting to WebSocket at ${wsUrl}`);
+      
+      console.log(`Attempting to connect to WebSocket at ${wsUrl} for course ${courseId}`);
+      console.log(`Current location: ${window.location.href}`);
+      
+      // Create the WebSocket connection
       const socket = new WebSocket(wsUrl);
+      console.log("WebSocket object created:", socket);
 
-      socket.addEventListener("open", () => {
-        console.log("WebSocket connected");
+      // Connection opened
+      socket.addEventListener("open", (event) => {
+        console.log("WebSocket connection established:", event);
         setConnected(true);
         courseIdRef.current = courseId;
         
         // Send initial message with course ID
-        socket.send(JSON.stringify({
+        const joinMessage = {
           type: "join",
           payload: { courseId, userId: user?.id }
-        }));
+        };
+        console.log("Sending join message:", joinMessage);
+        socket.send(JSON.stringify(joinMessage));
         
         // Set up ping interval to keep connection alive
         clearInterval(pingIntervalRef.current);
         pingIntervalRef.current = setInterval(() => {
           if (socket.readyState === WebSocket.OPEN) {
+            console.log("Sending ping");
             socket.send(JSON.stringify({ type: "ping" }));
+          } else {
+            console.warn("Cannot send ping - socket not open");
           }
         }, 30000);
       });
 
+      // Listen for messages
       socket.addEventListener("message", (event) => {
+        console.log("WebSocket message received:", event.data);
         try {
           const message = JSON.parse(event.data) as Message;
+          
+          // Handle welcome message
+          if (message.type === "welcome") {
+            console.log("Welcome message from server:", message.payload);
+          }
+          
+          // Handle join confirmation
+          if (message.type === "joinConfirmed") {
+            console.log("Successfully joined course room:", message.payload);
+          }
           
           // Notify all subscribed callbacks for this message type
           subscriptionsRef.current.forEach((subscription) => {
@@ -91,28 +115,32 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         }
       });
 
-      socket.addEventListener("close", () => {
-        console.log("WebSocket disconnected");
+      // Connection closed
+      socket.addEventListener("close", (event) => {
+        console.log("WebSocket connection closed:", event.code, event.reason);
         setConnected(false);
         clearInterval(pingIntervalRef.current);
         
         // Try to reconnect if we have a courseId
         if (courseIdRef.current !== null) {
+          console.log(`Will attempt to reconnect to course ${courseIdRef.current} in 3 seconds`);
           clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = setTimeout(() => {
+            console.log("Attempting reconnection...");
             createWebSocket(courseIdRef.current!);
           }, 3000);
         }
       });
 
-      socket.addEventListener("error", (error) => {
-        console.error("WebSocket error:", error);
+      // Connection error
+      socket.addEventListener("error", (event) => {
+        console.error("WebSocket connection error:", event);
         setConnected(false);
       });
 
       webSocketRef.current = socket;
     } catch (error) {
-      console.error("Error creating WebSocket:", error);
+      console.error("Error creating WebSocket connection:", error);
       setConnected(false);
     }
   };
