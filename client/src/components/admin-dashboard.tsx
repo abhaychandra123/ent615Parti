@@ -79,7 +79,9 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       await apiRequest("POST", "/api/participation-records", {
         studentId,
         points,
-        requestId
+        requestId,
+        feedback: "", // Add empty feedback to satisfy schema
+        note: "Quick participation points" // Add default note
       });
       
       toast({
@@ -91,6 +93,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       refetchRequests();
       refetchRecords();
     } catch (error) {
+      console.error("Error assigning points:", error);
       toast({
         title: "Error",
         description: "Failed to assign participation points",
