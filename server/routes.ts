@@ -55,12 +55,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const wss = new WebSocketServer({ 
     server: httpServer, 
     path: "/ws",
-    perMessageDeflate: false
+    perMessageDeflate: false,
+    // Add a longer ping timeout to help with reconnection issues
+    clientTracking: true
+  });
+  
+  // Keep track of connected clients by user ID
+  const connectedClients = new Map<number, Set<WebSocket>>();
+  
+  // Set up a interval to check connection status and clean up dead connections
+  const connectionCheckInterval = setInterval(() => {
+    // Check each connection
+    wss.clients.forEach(client => {
+      if (client.readyState !== WebSocket.OPEN) {
+        try {
+          client.terminate();
+        } catch (err) {
+          // Ignore errors on termination
+        }
+      }
+    });
+    
+    // Log current connected users
+    if (wss.clients.size > 0) {
+      console.log(`Active WebSocket connections: ${wss.clients.size}`);
+    }
+  }, 60000); // Check every minute
+  
+  // Clean up interval on server shutdown
+  httpServer.on('close', () => {
+    clearInterval(connectionCheckInterval);
   });
   
   // WebSocket connection handler
   wss.on("connection", (ws, req) => {
-    console.log("WebSocket client connected", req.headers.origin);
+    const clientIp = req.socket.remoteAddress || 'unknown';
+    console.log(`WebSocket client connected from ${clientIp}`);
     
     // Send a welcome message to verify the connection works
     try {
@@ -69,41 +99,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error sending welcome message:", error);
     }
     
+    // Initialize connection data
+    let userId: number | null = null;
+    
+    // Handler for client messages
     ws.on("message", async (message) => {
       try {
-        console.log("WebSocket received message:", message.toString());
-        const parsedMessage = JSON.parse(message.toString()) as WebSocketMessage;
+        const messageStr = message.toString();
+        const parsedMessage = JSON.parse(messageStr) as WebSocketMessage;
         
-        if (parsedMessage.type === "ping") {
-          console.log("Received ping, sending pong");
-          ws.send(JSON.stringify({ type: "pong" }));
-          return;
-        }
-        
-        if (parsedMessage.type === "join") {
-          const { userId } = parsedMessage.payload;
-          // Store user data with the connection
-          (ws as any).userData = { userId };
-          console.log(`User ${userId} joined WebSocket room`);
-          
-          // Confirm the join
-          ws.send(JSON.stringify({ 
-            type: "joinConfirmed", 
-            payload: { userId, courseName: DEFAULT_COURSE.name, message: "Successfully joined WebSocket room" } 
-          }));
-          return;
+        // Handle different message types
+        switch (parsedMessage.type) {
+          case "ping":
+            // Respond to ping with pong but don't log to reduce noise
+            ws.send(JSON.stringify({ type: "pong" }));
+            break;
+            
+          case "join":
+            // User is joining a room - store their info
+            userId = parsedMessage.payload.userId;
+            
+            if (!userId) {
+              console.warn("Received join message without userId");
+              break;
+            }
+            
+            // Associate this connection with the user ID
+            (ws as any).userData = { userId };
+            
+            // Register in connected clients
+            if (!connectedClients.has(userId)) {
+              connectedClients.set(userId, new Set());
+            }
+            connectedClients.get(userId)!.add(ws);
+            
+            console.log(`User ${userId} joined WebSocket room`);
+            
+            // Confirm the join
+            ws.send(JSON.stringify({ 
+              type: "joinConfirmed", 
+              payload: { 
+                userId, 
+                courseName: DEFAULT_COURSE.name, 
+                message: "Successfully joined WebSocket room" 
+              } 
+            }));
+            break;
+            
+          default:
+            // Log other message types
+            if (parsedMessage.type !== "ping" && parsedMessage.type !== "pong") {
+              console.log(`Received message type: ${parsedMessage.type}`);
+            }
         }
       } catch (error) {
         console.error("WebSocket message error:", error);
       }
     });
     
+    // Handle connection errors
     ws.on("error", (error) => {
-      console.error("WebSocket error:", error);
+      console.error("WebSocket connection error:", error);
     });
     
+    // Handle connection close
     ws.on("close", (code, reason) => {
-      console.log("WebSocket client disconnected", code, reason.toString());
+      // Remove from connected clients map
+      if (userId) {
+        const userConnections = connectedClients.get(userId);
+        if (userConnections) {
+          userConnections.delete(ws);
+          if (userConnections.size === 0) {
+            connectedClients.delete(userId);
+          }
+        }
+        
+        // Don't log normal closures to reduce console noise
+        if (code !== 1000 && code !== 1001 && code !== 1005) {
+          console.log(`WebSocket client (user ${userId}) disconnected with code ${code}`);
+        }
+      }
     });
   });
   

@@ -8,18 +8,18 @@ import StudentDashboard from "@/components/student-dashboard";
 import AdminDashboard from "@/components/admin-dashboard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-// Component that manages WebSocket connection
+// Component that manages WebSocket connection but doesn't force reconnection
+// The useWebSocket hook now handles connecting automatically when a user is present
 function CourseWithWebSocket({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const { connect } = useWebSocket();
+  const { connected, connecting } = useWebSocket();
   
-  // Connect to the WebSocket when the component mounts
+  // Log connection status but don't force reconnection
   useEffect(() => {
     if (user) {
-      console.log("Connecting to WebSocket for user:", user.id);
-      connect();
+      console.log(`WebSocket status: ${connecting ? 'connecting' : (connected ? 'connected' : 'disconnected')}`);
     }
-  }, [user, connect]);
+  }, [user, connected, connecting]);
   
   return <>{children}</>;
 }
