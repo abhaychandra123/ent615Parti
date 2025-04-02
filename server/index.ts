@@ -3,6 +3,14 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import runMigration from "./migrate";
 
+// When we start the server, ensure we're using the DatabaseStorage
+import { DatabaseStorage } from "./database-storage";
+import { storage as memStorage } from "./storage";
+
+// This is a temporary hack to ensure the DatabaseStorage is used
+// We're overriding the storage object with a new instance of DatabaseStorage
+(global as any).storage = new DatabaseStorage();
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

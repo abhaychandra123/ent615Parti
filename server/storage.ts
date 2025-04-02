@@ -187,67 +187,8 @@ export class MemStorage implements IStorage {
   }
 }
 
-/**
- * Database storage implementation - to be implemented when needed
- */
-export class DatabaseStorage implements IStorage {
-  sessionStore: session.Store;
+// Import DatabaseStorage to use PostgreSQL database
+import { DatabaseStorage } from "./database-storage";
 
-  constructor() {
-    // This would be replaced with a real database-backed session store
-    this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000,
-    });
-  }
-
-  async getUser(id: number): Promise<User | undefined> {
-    throw new Error("Database storage not implemented");
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    throw new Error("Database storage not implemented");
-  }
-
-  async createUser(user: InsertUser): Promise<User> {
-    throw new Error("Database storage not implemented");
-  }
-
-  async getAllStudents(): Promise<User[]> {
-    throw new Error("Database storage not implemented");
-  }
-
-  async createParticipationRequest(request: InsertParticipationRequest): Promise<ParticipationRequest> {
-    throw new Error("Database storage not implemented");
-  }
-
-  async getActiveParticipationRequests(): Promise<ParticipationRequestWithStudent[]> {
-    throw new Error("Database storage not implemented");
-  }
-
-  async deactivateParticipationRequest(id: number): Promise<ParticipationRequest | undefined> {
-    throw new Error("Database storage not implemented");
-  }
-
-  async getParticipationRequestById(id: number): Promise<ParticipationRequest | undefined> {
-    throw new Error("Database storage not implemented");
-  }
-
-  async createParticipationRecord(record: InsertParticipationRecord): Promise<ParticipationRecord> {
-    throw new Error("Database storage not implemented");
-  }
-
-  async getAllParticipationRecords(): Promise<ParticipationRecordWithStudent[]> {
-    throw new Error("Database storage not implemented");
-  }
-
-  async getParticipationRecordsByStudent(studentId: number): Promise<ParticipationRecord[]> {
-    throw new Error("Database storage not implemented");
-  }
-
-  async getTotalParticipationPointsByStudent(studentId: number): Promise<number> {
-    throw new Error("Database storage not implemented");
-  }
-}
-
-// Export an instance of MemStorage by default
-export const storage = new MemStorage();
+// Export an instance of the DatabaseStorage
+export const storage = new DatabaseStorage();

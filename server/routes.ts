@@ -2,7 +2,10 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { setupAuth } from "./auth";
-import { storage } from "./storage";
+import { storage as defaultStorage } from "./storage";
+// Get the storage from global if it exists (our override in index.ts)
+// Otherwise fall back to the default from storage.ts
+const storage = (global as any).storage || defaultStorage;
 import { DEFAULT_COURSE } from "@shared/schema";
 import { 
   insertParticipationRequestSchema, 
@@ -32,10 +35,29 @@ const ensureAuthenticated = (req: Request, res: Response, next: Function) => {
 
 // Middleware to ensure user is an admin
 const ensureAdmin = (req: Request, res: Response, next: Function) => {
-  if (req.isAuthenticated() && req.user && req.user.role === "admin") {
-    // TypeScript: After this middleware, req.user is guaranteed to be defined and an admin
+  console.log("Checking admin access, user:", req.user);
+  
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ message: "Unauthorized: Login required" });
+  }
+  
+  if (!req.user) {
+    return res.status(401).json({ message: "Unauthorized: User data missing" });
+  }
+  
+  // For debugging, log the user object
+  console.log("User object in ensureAdmin:", {
+    id: req.user.id,
+    username: req.user.username,
+    role: req.user.role
+  });
+  
+  // Actually check if the user is an admin
+  if (req.user.role === "admin") {
     return next();
   }
+  
+  // Return a proper error message
   res.status(403).json({ message: "Forbidden: Admin access required" });
 };
 
@@ -230,7 +252,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check if student already has an active request
       const activeRequests = await storage.getActiveParticipationRequests();
-      const existingRequest = activeRequests.find(r => r.student.id === req.user!.id);
+      const existingRequest = activeRequests.find((r) => {
+        return r.student && r.student.id === req.user!.id;
+      });
       
       if (existingRequest) {
         return res.status(400).json({ message: "You already have an active participation request" });
