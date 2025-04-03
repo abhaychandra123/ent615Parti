@@ -10,7 +10,7 @@ import { DEFAULT_COURSE } from "@shared/schema";
 import { 
   insertParticipationRequestSchema, 
   insertParticipationRecordSchema, 
-  type User 
+  type User
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -252,7 +252,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check if student already has an active request
       const activeRequests = await storage.getActiveParticipationRequests();
-      const existingRequest = activeRequests.find((r) => {
+      const existingRequest = activeRequests.find((r: any) => {
         return r.student && r.student.id === req.user!.id;
       });
       

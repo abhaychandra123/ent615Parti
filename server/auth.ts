@@ -75,8 +75,21 @@ export function setupAuth(app: Express) {
         return res.status(400).send("Username already exists");
       }
 
+      // Check if professor verification code is provided to assign admin role
+      let { role, professorCode, ...userData } = req.body;
+      
+      // Verify professor code before allowing admin role
+      if (role === "admin" && professorCode !== "iamaprofessor") {
+        return res.status(400).send("Invalid professor verification code");
+      }
+      
+      if (professorCode === "iamaprofessor") {
+        console.log("Creating admin account with verification code");
+      }
+
       const user = await storage.createUser({
-        ...req.body,
+        ...userData,
+        role,
         password: await hashPassword(req.body.password),
       });
 

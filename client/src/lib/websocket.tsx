@@ -67,16 +67,12 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }
 
     // Get the current hostname and use it for WebSocket connection
-    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsHost = window.location.hostname;
-    const wsPort = window.location.port ? `:${window.location.port}` : '';
-    const wsPath = "/ws";
-    const wsUrl = `${wsProtocol}//${wsHost}${wsPort}${wsPath}`;
-    
+    // Instead of constructing a custom URL, use the same origin with the ws protocol
+    let wsUrl;
     try {
-      if (!wsHost) {
-        throw new Error("Invalid hostname for WebSocket connection");
-      }
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host = window.location.host; // This includes hostname and port
+      wsUrl = `${protocol}//${host}/ws`;
       
       console.log(`Attempting to connect to WebSocket at ${wsUrl}`);
       

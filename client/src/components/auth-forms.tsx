@@ -77,8 +77,8 @@ export default function AuthForms() {
 
   // Handle register form submission
   const onRegisterSubmit = (data: RegisterFormData) => {
-    // Remove confirmPassword and professorCode as they're not part of the API schema
-    const { confirmPassword, professorCode, ...registerData } = data;
+    // Remove confirmPassword but keep professorCode for admin role verification
+    const { confirmPassword, ...registerData } = data;
     registerMutation.mutate(registerData);
   };
 
@@ -252,8 +252,8 @@ export default function AuthForms() {
                   )}
                 />
                 
-                {/* Show professor code field only when role is admin */}
-                {watchRole === "admin" && (
+                {/* Only show professor code field if role is admin */}
+                {registerForm.watch("role") === "admin" && (
                   <FormField
                     control={registerForm.control}
                     name="professorCode"
@@ -261,7 +261,7 @@ export default function AuthForms() {
                       <FormItem>
                         <FormLabel>Professor Verification Code</FormLabel>
                         <FormControl>
-                          <Input placeholder="Enter verification code" {...field} />
+                          <Input type="password" placeholder="Enter verification code" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
