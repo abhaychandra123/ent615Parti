@@ -179,4 +179,23 @@ export class DatabaseStorage implements IStorage {
     
     return parseInt(result.rows[0]?.total || '0');
   }
+  
+  async deleteParticipationRecordsFromDate(date: Date): Promise<number> {
+    // Set start and end of day
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    // Delete records from the specified date
+    const result = await pool.query(
+      `DELETE FROM participation_records 
+       WHERE timestamp >= $1 AND timestamp <= $2
+       RETURNING id`,
+      [startOfDay, endOfDay]
+    );
+    
+    return result.rowCount;
+  }
 }

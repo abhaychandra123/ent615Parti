@@ -26,6 +26,7 @@ export interface IStorage {
   getAllParticipationRecords(): Promise<ParticipationRecordWithStudent[]>;
   getParticipationRecordsByStudent(studentId: number): Promise<ParticipationRecord[]>;
   getTotalParticipationPointsByStudent(studentId: number): Promise<number>;
+  deleteParticipationRecordsFromDate(date: Date): Promise<number>;
   
   // Session store
   sessionStore: session.Store;
@@ -184,6 +185,26 @@ export class MemStorage implements IStorage {
   async getTotalParticipationPointsByStudent(studentId: number): Promise<number> {
     const studentRecords = await this.getParticipationRecordsByStudent(studentId);
     return studentRecords.reduce((sum, record) => sum + record.points, 0);
+  }
+  
+  async deleteParticipationRecordsFromDate(date: Date): Promise<number> {
+    const startOfDay = date;
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    // Find records from the specified date
+    const recordsToDelete = Array.from(this.participationRecords.values())
+      .filter(record => {
+        const recordDate = new Date(record.timestamp);
+        return recordDate >= startOfDay && recordDate <= endOfDay;
+      });
+    
+    // Delete the records
+    recordsToDelete.forEach(record => {
+      this.participationRecords.delete(record.id);
+    });
+    
+    return recordsToDelete.length;
   }
 }
 

@@ -10,7 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Course, ParticipationRequestWithStudent, ParticipationRecordWithStudent } from "@shared/schema";
 import { format } from "date-fns";
-import { MessageSquare, RefreshCcw, Download as DownloadIcon, User as UserIcon, BarChart as ChartIcon, Clock as ClockIcon, Hand as HandIcon } from "lucide-react";
+import { MessageSquare, RefreshCcw, Download as DownloadIcon, User as UserIcon, BarChart as ChartIcon, Clock as ClockIcon, Hand as HandIcon, Trash as TrashIcon } from "lucide-react";
 import FeedbackModal from "@/components/feedback-modal";
 import { Badge } from "@/components/ui/badge";
 
@@ -66,10 +66,17 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       refetchRecords();
     });
     
+    // Subscribe to deleted participation records
+    const recordsDeletedSubscription = subscribe("participationRecordsDeleted", () => {
+      console.log("Participation records deleted");
+      refetchRecords();
+    });
+    
     return () => {
       requestSubscription();
       deactivationSubscription();
       recordSubscription();
+      recordsDeletedSubscription();
     };
   }, [subscribe, refetchRequests, refetchRecords]);
   
@@ -143,6 +150,33 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
   };
   
   // Export participation data
+  // Handle deletion of today's participation records
+  const handleDeleteTodayRecords = async () => {
+    if (!window.confirm("Are you sure you want to delete all of today's participation records? This action cannot be undone.")) {
+      return;
+    }
+    
+    try {
+      const response = await apiRequest("DELETE", "/api/participation-records/today");
+      const data = await response.json();
+      
+      toast({
+        title: "Records Deleted",
+        description: `${data.count} participation record(s) from today have been deleted`,
+      });
+      
+      // Refresh data
+      refetchRecords();
+    } catch (error) {
+      console.error("Error deleting records:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete today's participation records",
+        variant: "destructive",
+      });
+    }
+  };
+  
   const handleExportData = () => {
     if (!participationRecords) return;
     
@@ -314,15 +348,26 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
                 <ClockIcon className="mr-2 h-5 w-5" />
                 Today's Participation
               </CardTitle>
-              <Button 
-                size="sm" 
-                variant="outline" 
-                className="flex items-center text-sm"
-                onClick={handleExportData}
-              >
-                <DownloadIcon className="h-3 w-3 mr-1" />
-                Export
-              </Button>
+              <div className="flex space-x-2">
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="flex items-center text-sm"
+                  onClick={handleDeleteTodayRecords}
+                >
+                  <TrashIcon className="h-3 w-3 mr-1" />
+                  Delete All
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="flex items-center text-sm"
+                  onClick={handleExportData}
+                >
+                  <DownloadIcon className="h-3 w-3 mr-1" />
+                  Export
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>

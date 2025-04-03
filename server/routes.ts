@@ -400,6 +400,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Delete all today's participation records
+  app.delete("/api/participation-records/today", ensureAdmin, async (req, res) => {
+    try {
+      // Get today's date in local timezone
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Delete all records from today
+      const deletedCount = await storage.deleteParticipationRecordsFromDate(today);
+      
+      // Broadcast the deletion to all clients
+      broadcastToAll({
+        type: "participationRecordsDeleted",
+        payload: { date: today.toISOString() }
+      });
+      
+      return res.json({ message: `Deleted ${deletedCount} participation records from today`, count: deletedCount });
+    } catch (error) {
+      console.error("Error deleting today's participation records:", error);
+      return res.status(500).json({ message: "Failed to delete today's participation records" });
+    }
+  });
+  
   app.get("/api/students/:id/participation-records", ensureAdmin, async (req, res) => {
     try {
       const studentId = parseInt(req.params.id);

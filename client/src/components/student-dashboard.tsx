@@ -26,7 +26,11 @@ export default function StudentDashboard({ selectedCourse }: StudentDashboardPro
   const { subscribe } = useWebSocket();
   
   // Get student participation records
-  const { data: participationRecords, isLoading: recordsLoading } = useQuery<ParticipationRecord[]>({
+  const { 
+    data: participationRecords, 
+    isLoading: recordsLoading,
+    refetch: refetchRecords 
+  } = useQuery<ParticipationRecord[]>({
     queryKey: ["/api/participation-records"],
   });
   
@@ -117,7 +121,7 @@ export default function StudentDashboard({ selectedCourse }: StudentDashboardPro
   // Subscribe to WebSocket events
   useEffect(() => {
     // Subscribe to participation request deactivations
-    const unsubscribe = subscribe("participationRequestDeactivated", (payload: { id: number }) => {
+    const requestUnsubscribe = subscribe("participationRequestDeactivated", (payload: { id: number }) => {
       if (payload.id === requestId) {
         setHandRaised(false);
         setRequestId(null);
@@ -135,10 +139,23 @@ export default function StudentDashboard({ selectedCourse }: StudentDashboardPro
       }
     });
     
+    // Subscribe to deleted participation records
+    const recordsDeletedUnsubscribe = subscribe("participationRecordsDeleted", () => {
+      // Refresh participation records when deletions happen
+      refetchRecords();
+      queryClient.invalidateQueries({ queryKey: ["/api/students", user?.id, "participation-points"] });
+      
+      toast({
+        title: "Records Updated",
+        description: "Today's participation records have been updated by the professor.",
+      });
+    });
+    
     return () => {
-      unsubscribe();
+      requestUnsubscribe();
+      recordsDeletedUnsubscribe();
     };
-  }, [requestId, user?.id, subscribe, toast]);
+  }, [requestId, user?.id, subscribe, toast, refetchRecords]);
   
   // Handle raise hand button click
   const handleRaiseHand = () => {
