@@ -143,6 +143,7 @@ export class DatabaseStorage implements IStorage {
       feedback: row.feedback,
       note: row.note,
       timestamp: row.timestamp,
+      hidden: row.hidden || false, // Include the hidden field
       student: {
         id: row.student_id,
         name: row.student_name,
@@ -166,7 +167,8 @@ export class DatabaseStorage implements IStorage {
       points: row.points,
       feedback: row.feedback,
       note: row.note,
-      timestamp: row.timestamp
+      timestamp: row.timestamp,
+      hidden: row.hidden || false // Include the hidden field
     }));
   }
   
@@ -177,7 +179,8 @@ export class DatabaseStorage implements IStorage {
       [studentId]
     );
     
-    return parseInt(result.rows[0]?.total || '0');
+    const total = result.rows[0]?.total;
+    return total ? parseInt(total) : 0;
   }
   
   async deleteParticipationRecordsFromDate(date: Date): Promise<number> {
@@ -188,14 +191,15 @@ export class DatabaseStorage implements IStorage {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
     
-    // Delete records from the specified date
+    // Mark records as hidden instead of deleting them
     const result = await pool.query(
-      `DELETE FROM participation_records 
+      `UPDATE participation_records 
+       SET hidden = true
        WHERE timestamp >= $1 AND timestamp <= $2
        RETURNING id`,
       [startOfDay, endOfDay]
     );
     
-    return result.rowCount;
+    return result.rowCount || 0; // Ensure we always return a number
   }
 }

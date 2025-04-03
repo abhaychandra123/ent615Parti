@@ -79,12 +79,9 @@ export class MemStorage implements IStorage {
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    for (const user of this.users.values()) {
-      if (user.username === username) {
-        return user;
-      }
-    }
-    return undefined;
+    // Use array method to avoid iteration issues
+    const userArray = [...this.users.values()];
+    return userArray.find(user => user.username === username);
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
@@ -99,7 +96,8 @@ export class MemStorage implements IStorage {
   }
 
   async getAllStudents(): Promise<User[]> {
-    return Array.from(this.users.values())
+    // Use spread operator to convert Map values to array
+    return [...this.users.values()]
       .filter(user => user.role === "student");
   }
 
@@ -118,7 +116,7 @@ export class MemStorage implements IStorage {
   }
 
   async getActiveParticipationRequests(): Promise<ParticipationRequestWithStudent[]> {
-    const activeRequests = Array.from(this.participationRequests.values())
+    const activeRequests = [...this.participationRequests.values()]
       .filter(request => request.active);
     
     return Promise.all(activeRequests.map(async request => {
@@ -154,7 +152,8 @@ export class MemStorage implements IStorage {
       courseId: DEFAULT_COURSE.id,
       note: insertRecord.note || null,
       feedback: insertRecord.feedback || null,
-      timestamp: new Date()
+      timestamp: new Date(),
+      hidden: false // Add hidden field with default value
     };
     const record: ParticipationRecord = { ...recordWithNulls, id };
     this.participationRecords.set(id, record);
@@ -162,7 +161,7 @@ export class MemStorage implements IStorage {
   }
 
   async getAllParticipationRecords(): Promise<ParticipationRecordWithStudent[]> {
-    const records = Array.from(this.participationRecords.values());
+    const records = [...this.participationRecords.values()];
     
     return Promise.all(records.map(async record => {
       const student = await this.getUser(record.studentId);
@@ -178,7 +177,7 @@ export class MemStorage implements IStorage {
   }
 
   async getParticipationRecordsByStudent(studentId: number): Promise<ParticipationRecord[]> {
-    return Array.from(this.participationRecords.values())
+    return [...this.participationRecords.values()]
       .filter(record => record.studentId === studentId);
   }
 
@@ -193,18 +192,21 @@ export class MemStorage implements IStorage {
     endOfDay.setHours(23, 59, 59, 999);
     
     // Find records from the specified date
-    const recordsToDelete = Array.from(this.participationRecords.values())
+    const recordsToUpdate = [...this.participationRecords.values()]
       .filter(record => {
         const recordDate = new Date(record.timestamp);
         return recordDate >= startOfDay && recordDate <= endOfDay;
       });
     
-    // Delete the records
-    recordsToDelete.forEach(record => {
-      this.participationRecords.delete(record.id);
+    // Mark the records as hidden instead of deleting them
+    recordsToUpdate.forEach(record => {
+      this.participationRecords.set(record.id, {
+        ...record,
+        hidden: true
+      });
     });
     
-    return recordsToDelete.length;
+    return recordsToUpdate.length;
   }
 }
 

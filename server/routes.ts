@@ -10,7 +10,9 @@ import { DEFAULT_COURSE } from "@shared/schema";
 import { 
   insertParticipationRequestSchema, 
   insertParticipationRecordSchema, 
-  type User
+  type User,
+  type ParticipationRecord,
+  type ParticipationRecordWithStudent
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -388,12 +390,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/participation-records", ensureAuthenticated, async (req, res) => {
     try {
+      const showHidden = req.query.showHidden === 'true';
+      
       if (req.user!.role === "admin") {
         const records = await storage.getAllParticipationRecords();
-        return res.json(records);
+        
+        // Filter out hidden records if showHidden is false
+        const filteredRecords = showHidden 
+          ? records 
+          : records.filter((record: ParticipationRecordWithStudent) => !record.hidden);
+          
+        return res.json(filteredRecords);
       } else {
         const records = await storage.getParticipationRecordsByStudent(req.user!.id);
-        return res.json(records);
+        
+        // Filter out hidden records if showHidden is false
+        const filteredRecords = showHidden 
+          ? records 
+          : records.filter((record: ParticipationRecord) => !record.hidden);
+          
+        return res.json(filteredRecords);
       }
     } catch (error) {
       return res.status(500).json({ message: "Error fetching participation records" });
@@ -427,13 +443,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const studentId = parseInt(req.params.id);
       const student = await storage.getUser(studentId);
+      const showHidden = req.query.showHidden === 'true';
       
       if (!student || student.role !== "student") {
         return res.status(404).json({ message: "Student not found" });
       }
       
       const records = await storage.getParticipationRecordsByStudent(studentId);
-      return res.json(records);
+      
+      // Filter out hidden records if showHidden is false
+      const filteredRecords = showHidden 
+        ? records 
+        : records.filter((record: ParticipationRecord) => !record.hidden);
+      
+      return res.json(filteredRecords);
     } catch (error) {
       return res.status(500).json({ message: "Error fetching student participation records" });
     }

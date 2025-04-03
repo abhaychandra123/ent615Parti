@@ -37,13 +37,22 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
     refetchInterval: 10000, // Refresh every 10 seconds as a backup
   });
   
-  // Get participation records
+  // Get today's participation records (excludes hidden records)
   const { 
-    data: participationRecords,
-    isLoading: recordsLoading,
-    refetch: refetchRecords
+    data: todayParticipationRecords,
+    isLoading: todayRecordsLoading,
+    refetch: refetchTodayRecords
   } = useQuery<ParticipationRecordWithStudent[]>({
-    queryKey: ["/api/participation-records"],
+    queryKey: ["/api/participation-records", { showHidden: false }],
+  });
+  
+  // Get all participation records (for the overview, including hidden records)
+  const { 
+    data: allParticipationRecords,
+    isLoading: allRecordsLoading,
+    refetch: refetchAllRecords
+  } = useQuery<ParticipationRecordWithStudent[]>({
+    queryKey: ["/api/participation-records", { showHidden: true }],
   });
   
   // Subscribe to WebSocket events
@@ -63,13 +72,15 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
     // Subscribe to new participation records
     const recordSubscription = subscribe("participationRecordCreated", () => {
       console.log("New participation record created");
-      refetchRecords();
+      refetchTodayRecords();
+      refetchAllRecords();
     });
     
     // Subscribe to deleted participation records
     const recordsDeletedSubscription = subscribe("participationRecordsDeleted", () => {
       console.log("Participation records deleted");
-      refetchRecords();
+      refetchTodayRecords();
+      refetchAllRecords();
     });
     
     return () => {
@@ -78,7 +89,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       recordSubscription();
       recordsDeletedSubscription();
     };
-  }, [subscribe, refetchRequests, refetchRecords]);
+  }, [subscribe, refetchRequests, refetchTodayRecords, refetchAllRecords]);
   
   // Handle assigning participation points
   const handleAssignPoints = async (studentId: number, points: number, requestId: number) => {
@@ -98,7 +109,8 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       
       // Refresh data
       refetchRequests();
-      refetchRecords();
+      refetchTodayRecords();
+      refetchAllRecords();
     } catch (error) {
       console.error("Error assigning points:", error);
       toast({
@@ -137,7 +149,8 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       
       // Refresh data
       refetchRequests();
-      refetchRecords();
+      refetchTodayRecords();
+      refetchAllRecords();
     } catch (error) {
       toast({
         title: "Error",
@@ -166,7 +179,8 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       });
       
       // Refresh data
-      refetchRecords();
+      refetchTodayRecords();
+      refetchAllRecords();
     } catch (error) {
       console.error("Error deleting records:", error);
       toast({
@@ -178,13 +192,13 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
   };
   
   const handleExportData = () => {
-    if (!participationRecords) return;
+    if (!allParticipationRecords) return;
     
     // Format the data for export
     const headers = ['Student', 'Points', 'Time', 'Date', 'Note', 'Feedback'];
     const csvRows = [headers];
     
-    participationRecords.forEach(record => {
+    allParticipationRecords.forEach((record: ParticipationRecordWithStudent) => {
       const row = [
         record.student.name,
         String(record.points),
@@ -218,7 +232,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
 
   // Function to calculate student participation statistics
   const calculateStudentStats = () => {
-    if (!participationRecords) return [];
+    if (!allParticipationRecords) return [];
     
     const studentMap: Record<number, {
       id: number,
@@ -229,7 +243,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       lastParticipation: Date | null
     }> = {};
     
-    participationRecords.forEach(record => {
+    allParticipationRecords.forEach((record: ParticipationRecordWithStudent) => {
       const { student, points, timestamp } = record;
       
       if (!studentMap[student.id]) {
@@ -248,7 +262,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       
       const recordDate = new Date(timestamp);
       if (!studentMap[student.id].lastParticipation || 
-          recordDate > studentMap[student.id].lastParticipation) {
+          (studentMap[student.id].lastParticipation && recordDate > studentMap[student.id].lastParticipation)) {
         studentMap[student.id].lastParticipation = recordDate;
       }
     });
@@ -371,12 +385,12 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
             </div>
           </CardHeader>
           <CardContent>
-            {recordsLoading ? (
+            {todayRecordsLoading ? (
               <div className="py-4 text-center">
                 <RefreshCcw className="animate-spin h-6 w-6 mx-auto mb-2 text-muted-foreground" />
                 <p className="text-muted-foreground">Loading participation data...</p>
               </div>
-            ) : participationRecords && participationRecords.length > 0 ? (
+            ) : todayParticipationRecords && todayParticipationRecords.length > 0 ? (
               <div className="overflow-y-auto max-h-[400px]">
                 <Table>
                   <TableHeader>
@@ -388,13 +402,8 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {participationRecords
-                      .filter(record => {
-                        const recordDate = new Date(record.timestamp);
-                        const today = new Date();
-                        return recordDate.toDateString() === today.toDateString();
-                      })
-                      .map((record) => (
+                    {todayParticipationRecords
+                      .map((record: ParticipationRecordWithStudent) => (
                         <TableRow key={record.id}>
                           <TableCell className="font-medium">
                             {record.student.name}
@@ -455,7 +464,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
           </div>
         </CardHeader>
         <CardContent>
-          {recordsLoading ? (
+          {allRecordsLoading ? (
             <div className="py-4 text-center">
               <RefreshCcw className="animate-spin h-6 w-6 mx-auto mb-2 text-muted-foreground" />
               <p className="text-muted-foreground">Loading overview data...</p>

@@ -52,6 +52,7 @@ export const participationRecords = pgTable("participation_records", {
   feedback: text("feedback"),
   note: text("note"),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
+  hidden: boolean("hidden").notNull().default(false),
 });
 
 export const insertParticipationRecordSchema = createInsertSchema(participationRecords)
