@@ -253,12 +253,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Check if student already has an active request
-      const activeRequests = await storage.getActiveParticipationRequests();
-      const existingRequest = activeRequests.find((r: any) => {
-        return r.student && r.student.id === req.user!.id;
-      });
+      const hasActiveRequest = await storage.hasActiveParticipationRequest(req.user!.id);
       
-      if (existingRequest) {
+      if (hasActiveRequest) {
         return res.status(400).json({ message: "You already have an active participation request" });
       }
       

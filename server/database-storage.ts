@@ -90,6 +90,14 @@ export class DatabaseStorage implements IStorage {
       }
     }));
   }
+
+  async hasActiveParticipationRequest(studentId: number): Promise<boolean> {
+    const result = await pool.query(
+      'SELECT 1 FROM participation_requests WHERE student_id = $1 AND active = true LIMIT 1',
+      [studentId]
+    );
+    return result.rowCount !== null && result.rowCount > 0;
+  }
   
   async deactivateParticipationRequest(id: number): Promise<ParticipationRequest | undefined> {
     const result = await pool.query(

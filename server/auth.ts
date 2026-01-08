@@ -79,11 +79,12 @@ export function setupAuth(app: Express) {
       let { role, professorCode, ...userData } = req.body;
       
       // Verify professor code before allowing admin role
-      if (role === "admin" && professorCode !== "iamaprofessor") {
+      const PROFESSOR_CODE = process.env.PROFESSOR_VERIFICATION_CODE || "iamaprofessor";
+      if (role === "admin" && professorCode !== PROFESSOR_CODE) {
         return res.status(400).send("Invalid professor verification code");
       }
       
-      if (professorCode === "iamaprofessor") {
+      if (professorCode === PROFESSOR_CODE) {
         console.log("Creating admin account with verification code");
       }
 

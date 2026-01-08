@@ -18,6 +18,7 @@ export interface IStorage {
   // ParticipationRequest methods
   createParticipationRequest(request: InsertParticipationRequest): Promise<ParticipationRequest>;
   getActiveParticipationRequests(): Promise<ParticipationRequestWithStudent[]>;
+  hasActiveParticipationRequest(studentId: number): Promise<boolean>;
   deactivateParticipationRequest(id: number): Promise<ParticipationRequest | undefined>;
   getParticipationRequestById(id: number): Promise<ParticipationRequest | undefined>;
   
