@@ -5,11 +5,11 @@ import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
-import { User as SelectUser } from "@shared/schema";
+import { User as SelectUser, sanitizeUser } from "@shared/schema";
 
 declare global {
   namespace Express {
-    interface User extends SelectUser {}
+    interface User extends SelectUser { }
   }
 }
 
@@ -50,7 +50,7 @@ export function setupAuth(app: Express) {
         const user = await storage.getUserByUsername(username);
         if (!user || !(await comparePasswords(password, user.password))) {
           return done(null, false);
-        } 
+        }
         return done(null, user);
       } catch (err) {
         return done(err);
@@ -77,13 +77,13 @@ export function setupAuth(app: Express) {
 
       // Check if professor verification code is provided to assign admin role
       let { role, professorCode, ...userData } = req.body;
-      
+
       // Verify professor code before allowing admin role
       const PROFESSOR_CODE = process.env.PROFESSOR_VERIFICATION_CODE || "iamaprofessor";
       if (role === "admin" && professorCode !== PROFESSOR_CODE) {
         return res.status(400).send("Invalid professor verification code");
       }
-      
+
       if (professorCode === PROFESSOR_CODE) {
         console.log("Creating admin account with verification code");
       }
@@ -96,7 +96,7 @@ export function setupAuth(app: Express) {
 
       req.login(user, (err) => {
         if (err) return next(err);
-        return res.status(201).json(user);
+        return res.status(201).json(sanitizeUser(user));
       });
     } catch (err) {
       next(err);
@@ -104,7 +104,7 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", passport.authenticate("local"), (req, res) => {
-    return res.status(200).json(req.user);
+    return res.status(200).json(sanitizeUser(req.user!));
   });
 
   app.post("/api/logout", (req, res, next) => {
@@ -116,6 +116,6 @@ export function setupAuth(app: Express) {
 
   app.get("/api/user", (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    res.json(req.user);
+    res.json(sanitizeUser(req.user!));
   });
 }

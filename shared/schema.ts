@@ -66,6 +66,20 @@ export const insertParticipationRecordSchema = createInsertSchema(participationR
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+// Safe user type without password (for frontend responses)
+export type SafeUser = Omit<User, "password">;
+
+// Helper function to remove password from user object
+export function sanitizeUser(user: User): SafeUser {
+  const { password, ...safeUser } = user;
+  return safeUser;
+}
+
+// Helper to sanitize multiple users
+export function sanitizeUsers(users: User[]): SafeUser[] {
+  return users.map(sanitizeUser);
+}
+
 // We maintain a Course type for compatibility
 export type Course = {
   id: number;
