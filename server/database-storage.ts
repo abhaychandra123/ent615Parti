@@ -162,9 +162,9 @@ export class DatabaseStorage implements IStorage {
   
   async getParticipationRecordsByStudent(studentId: number): Promise<ParticipationRecord[]> {
     const result = await pool.query(
-      `SELECT * FROM participation_records 
-       WHERE student_id = $1
-       ORDER BY timestamp DESC`,
+      `SELECT pr.* FROM participation_records pr
+       WHERE pr.student_id = $1
+       ORDER BY pr.timestamp DESC`,
       [studentId]
     );
     
@@ -179,25 +179,25 @@ export class DatabaseStorage implements IStorage {
       hidden: row.hidden || false // Include the hidden field
     }));
   }
-  
+
   async getTotalParticipationPointsByStudent(studentId: number): Promise<number> {
     const result = await pool.query(
       `SELECT SUM(points) as total FROM participation_records 
-       WHERE student_id = $1`,
+       WHERE student_id = $1 AND hidden = false`,
       [studentId]
     );
     
     const total = result.rows[0]?.total;
     return total ? parseInt(total) : 0;
   }
-  
+
   async deleteParticipationRecordsFromDate(date: Date): Promise<number> {
-    // Set start and end of day
+    // Use UTC for consistent date range across server instances/timezones
     const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
+    startOfDay.setUTCHours(0, 0, 0, 0);
     
     const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    endOfDay.setUTCHours(23, 59, 59, 999);
     
     // Mark records as hidden instead of deleting them
     const result = await pool.query(

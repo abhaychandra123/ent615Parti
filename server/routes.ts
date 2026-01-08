@@ -416,9 +416,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete all today's participation records
   app.delete("/api/participation-records/today", ensureAdmin, async (req, res) => {
     try {
-      // Get today's date in local timezone
+      // Get today's date in UTC to match database storage logic
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
       
       // Delete all records from today
       const deletedCount = await storage.deleteParticipationRecordsFromDate(today);
