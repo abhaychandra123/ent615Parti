@@ -129,12 +129,10 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
   };
 
   // Handle feedback submission
-  const handleFeedbackSubmit = async (feedback: string) => {
+  const handleFeedbackSubmit = async (feedback: string, points: number) => {
     if (!selectedStudent) return;
 
     try {
-      const points = 1; // Default points with feedback
-
       await apiRequest("POST", "/api/participation-records", {
         studentId: selectedStudent.id,
         points,
