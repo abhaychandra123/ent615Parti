@@ -3,16 +3,16 @@ const { Pool } = pkg;
 
 async function runMigration() {
   console.log('Starting database migration...');
-  
+
   try {
     // Connect directly using the Pool
     const pool = new Pool({
       connectionString: process.env.DATABASE_URL,
     });
-    
+
     // Define schema here to create all tables
     console.log('Creating tables if they don\'t exist...');
-    
+
     // Use SQL to create all tables
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -53,7 +53,8 @@ async function runMigration() {
         points INTEGER NOT NULL,
         feedback TEXT,
         note TEXT,
-        timestamp TIMESTAMP NOT NULL DEFAULT NOW()
+        timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
+        hidden BOOLEAN NOT NULL DEFAULT FALSE
       );
       
       CREATE TABLE IF NOT EXISTS session (
@@ -62,11 +63,22 @@ async function runMigration() {
         expire timestamp(6) NOT NULL,
         CONSTRAINT session_pkey PRIMARY KEY (sid)
       );
+      
+      -- Add hidden column to participation_records if it doesn't exist
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'participation_records' AND column_name = 'hidden'
+        ) THEN
+          ALTER TABLE participation_records ADD COLUMN hidden BOOLEAN NOT NULL DEFAULT FALSE;
+        END IF;
+      END $$;
     `);
-    
+
     // Close the pool
     await pool.end();
-    
+
     console.log('Migration completed successfully!');
   } catch (error) {
     console.error('Migration failed:', error);

@@ -1,6 +1,6 @@
-import { 
+import {
   type User, type InsertUser,
-  type ParticipationRequest, type InsertParticipationRequest, 
+  type ParticipationRequest, type InsertParticipationRequest,
   type ParticipationRequestWithStudent,
   type ParticipationRecord, type InsertParticipationRecord,
   type ParticipationRecordWithStudent,
@@ -15,11 +15,11 @@ const PostgresSessionStore = connectPg(session);
 
 export class DatabaseStorage implements IStorage {
   sessionStore: session.Store;
-  
+
   constructor() {
-    this.sessionStore = new PostgresSessionStore({ 
-      pool, 
-      createTableIfMissing: true 
+    this.sessionStore = new PostgresSessionStore({
+      pool,
+      createTableIfMissing: true
     });
   }
 
@@ -37,35 +37,35 @@ export class DatabaseStorage implements IStorage {
   async createUser(user: InsertUser): Promise<User> {
     // Ensure role is set to 'student' by default if not provided
     const role = user.role || 'student';
-    
+
     const result = await pool.query(
       'INSERT INTO users (username, password, email, role, name) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [user.username, user.password, user.email, role, user.name]
     );
-    
+
     return result.rows[0];
   }
-  
+
   // Get all students
   async getAllStudents(): Promise<User[]> {
     const result = await pool.query('SELECT * FROM users WHERE role = $1', ['student']);
     return result.rows;
   }
-  
+
   // ParticipationRequest methods
   async createParticipationRequest(request: InsertParticipationRequest): Promise<ParticipationRequest> {
     const timestamp = new Date();
-    
+
     const result = await pool.query(
       `INSERT INTO participation_requests 
        (student_id, course_id, note, timestamp, active) 
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [request.studentId, DEFAULT_COURSE.id, request.note || null, timestamp, true]
     );
-    
+
     return result.rows[0];
   }
-  
+
   async getActiveParticipationRequests(): Promise<ParticipationRequestWithStudent[]> {
     const result = await pool.query(
       `SELECT pr.*, u.name as student_name, u.username as student_username
@@ -74,7 +74,7 @@ export class DatabaseStorage implements IStorage {
        WHERE pr.active = true
        ORDER BY pr.timestamp`
     );
-    
+
     // Transform to the expected format
     return result.rows.map(row => ({
       id: row.id,
@@ -98,42 +98,62 @@ export class DatabaseStorage implements IStorage {
     );
     return result.rowCount !== null && result.rowCount > 0;
   }
-  
+
   async deactivateParticipationRequest(id: number): Promise<ParticipationRequest | undefined> {
     const result = await pool.query(
       'UPDATE participation_requests SET active = false WHERE id = $1 RETURNING *',
       [id]
     );
-    
-    return result.rows[0];
+
+    const row = result.rows[0];
+    if (!row) return undefined;
+
+    return {
+      id: row.id,
+      studentId: row.student_id,
+      courseId: row.course_id,
+      note: row.note,
+      timestamp: row.timestamp,
+      active: row.active
+    };
   }
-  
+
   async getParticipationRequestById(id: number): Promise<ParticipationRequest | undefined> {
     const result = await pool.query('SELECT * FROM participation_requests WHERE id = $1', [id]);
-    return result.rows[0];
+    const row = result.rows[0];
+    if (!row) return undefined;
+
+    return {
+      id: row.id,
+      studentId: row.student_id,
+      courseId: row.course_id,
+      note: row.note,
+      timestamp: row.timestamp,
+      active: row.active
+    };
   }
-  
+
   // ParticipationRecord methods
   async createParticipationRecord(record: InsertParticipationRecord): Promise<ParticipationRecord> {
     const timestamp = new Date();
-    
+
     const result = await pool.query(
       `INSERT INTO participation_records 
        (student_id, course_id, points, feedback, note, timestamp) 
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
       [
-        record.studentId, 
-        DEFAULT_COURSE.id, 
-        record.points, 
-        record.feedback || null, 
-        record.note || null, 
+        record.studentId,
+        DEFAULT_COURSE.id,
+        record.points,
+        record.feedback || null,
+        record.note || null,
         timestamp
       ]
     );
-    
+
     return result.rows[0];
   }
-  
+
   async getAllParticipationRecords(): Promise<ParticipationRecordWithStudent[]> {
     const result = await pool.query(
       `SELECT pr.*, u.name as student_name, u.username as student_username
@@ -141,7 +161,7 @@ export class DatabaseStorage implements IStorage {
        JOIN users u ON pr.student_id = u.id
        ORDER BY pr.timestamp DESC`
     );
-    
+
     // Transform to the expected format
     return result.rows.map(row => ({
       id: row.id,
@@ -159,7 +179,7 @@ export class DatabaseStorage implements IStorage {
       }
     }));
   }
-  
+
   async getParticipationRecordsByStudent(studentId: number): Promise<ParticipationRecord[]> {
     const result = await pool.query(
       `SELECT pr.* FROM participation_records pr
@@ -167,7 +187,7 @@ export class DatabaseStorage implements IStorage {
        ORDER BY pr.timestamp DESC`,
       [studentId]
     );
-    
+
     return result.rows.map(row => ({
       id: row.id,
       studentId: row.student_id,
@@ -186,7 +206,7 @@ export class DatabaseStorage implements IStorage {
        WHERE student_id = $1 AND hidden = false`,
       [studentId]
     );
-    
+
     const total = result.rows[0]?.total;
     return total ? parseInt(total) : 0;
   }
@@ -195,10 +215,10 @@ export class DatabaseStorage implements IStorage {
     // Use UTC for consistent date range across server instances/timezones
     const startOfDay = new Date(date);
     startOfDay.setUTCHours(0, 0, 0, 0);
-    
+
     const endOfDay = new Date(date);
     endOfDay.setUTCHours(23, 59, 59, 999);
-    
+
     // Mark records as hidden instead of deleting them
     const result = await pool.query(
       `UPDATE participation_records 
@@ -207,7 +227,7 @@ export class DatabaseStorage implements IStorage {
        RETURNING id`,
       [startOfDay, endOfDay]
     );
-    
+
     return result.rowCount || 0; // Ensure we always return a number
   }
 }

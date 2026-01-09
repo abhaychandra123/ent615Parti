@@ -24,37 +24,37 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
   const { subscribe } = useWebSocket();
   const [selectedDateRange, setSelectedDateRange] = useState("month");
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<{id: number, name: string} | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<{ id: number, name: string } | null>(null);
   const [selectedRequestId, setSelectedRequestId] = useState<number | null>(null);
-  
+
   // Get participation requests (raised hands)
-  const { 
-    data: participationRequests, 
+  const {
+    data: participationRequests,
     isLoading: requestsLoading,
-    refetch: refetchRequests 
+    refetch: refetchRequests
   } = useQuery<ParticipationRequestWithStudent[]>({
     queryKey: ["/api/participation-requests"],
     refetchInterval: 10000, // Refresh every 10 seconds as a backup
   });
-  
+
   // Get today's participation records (excludes hidden records)
-  const { 
+  const {
     data: todayParticipationRecords,
     isLoading: todayRecordsLoading,
     refetch: refetchTodayRecords
   } = useQuery<ParticipationRecordWithStudent[]>({
     queryKey: ["/api/participation-records", { showHidden: false }],
   });
-  
+
   // Get all participation records (for the overview, including hidden records)
-  const { 
+  const {
     data: allParticipationRecords,
     isLoading: allRecordsLoading,
     refetch: refetchAllRecords
   } = useQuery<ParticipationRecordWithStudent[]>({
     queryKey: ["/api/participation-records", { showHidden: true }],
   });
-  
+
   // Subscribe to WebSocket events
   useEffect(() => {
     // Subscribe to new participation requests
@@ -62,27 +62,27 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       console.log("Received new participation request");
       refetchRequests();
     });
-    
+
     // Subscribe to participation request deactivations
     const deactivationSubscription = subscribe("participationRequestDeactivated", () => {
       console.log("Participation request deactivated");
       refetchRequests();
     });
-    
+
     // Subscribe to new participation records
     const recordSubscription = subscribe("participationRecordCreated", () => {
       console.log("New participation record created");
       refetchTodayRecords();
       refetchAllRecords();
     });
-    
+
     // Subscribe to deleted participation records
     const recordsDeletedSubscription = subscribe("participationRecordsDeleted", () => {
       console.log("Participation records deleted");
       refetchTodayRecords();
       refetchAllRecords();
     });
-    
+
     return () => {
       requestSubscription();
       deactivationSubscription();
@@ -90,7 +90,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       recordsDeletedSubscription();
     };
   }, [subscribe, refetchRequests, refetchTodayRecords, refetchAllRecords]);
-  
+
   // Handle assigning participation points
   const handleAssignPoints = async (studentId: number, points: number, requestId: number) => {
     try {
@@ -101,12 +101,12 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
         feedback: "", // Add empty feedback to satisfy schema
         note: "Quick participation points" // Add default note
       });
-      
+
       toast({
         title: "Points Added",
         description: `${points} participation point${points !== 1 ? 's' : ''} assigned successfully`,
       });
-      
+
       // Refresh data
       refetchRequests();
       refetchTodayRecords();
@@ -120,33 +120,33 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       });
     }
   };
-  
+
   // Handle opening feedback modal
   const handleOpenFeedbackModal = (student: { id: number, name: string }, requestId: number | null = null) => {
     setSelectedStudent(student);
     setSelectedRequestId(requestId);
     setFeedbackModalOpen(true);
   };
-  
+
   // Handle feedback submission
   const handleFeedbackSubmit = async (feedback: string) => {
     if (!selectedStudent) return;
-    
+
     try {
       const points = 1; // Default points with feedback
-      
+
       await apiRequest("POST", "/api/participation-records", {
         studentId: selectedStudent.id,
         points,
         feedback,
         requestId: selectedRequestId
       });
-      
+
       toast({
         title: "Feedback Saved",
         description: "Participation recorded with feedback",
       });
-      
+
       // Refresh data
       refetchRequests();
       refetchTodayRecords();
@@ -158,26 +158,26 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
         variant: "destructive",
       });
     }
-    
+
     setFeedbackModalOpen(false);
   };
-  
+
   // Export participation data
   // Handle deletion of today's participation records
   const handleDeleteTodayRecords = async () => {
     if (!window.confirm("Are you sure you want to delete all of today's participation records? This action cannot be undone.")) {
       return;
     }
-    
+
     try {
       const response = await apiRequest("DELETE", "/api/participation-records/today");
       const data = await response.json();
-      
+
       toast({
         title: "Records Deleted",
         description: `${data.count} participation record(s) from today have been deleted`,
       });
-      
+
       // Refresh data
       refetchTodayRecords();
       refetchAllRecords();
@@ -190,14 +190,14 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       });
     }
   };
-  
+
   const handleExportData = () => {
     if (!allParticipationRecords) return;
-    
+
     // Format the data for export
     const headers = ['Student', 'Points', 'Time', 'Date', 'Note', 'Feedback'];
     const csvRows = [headers];
-    
+
     allParticipationRecords.forEach((record: ParticipationRecordWithStudent) => {
       const row = [
         record.student.name,
@@ -209,10 +209,10 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       ];
       csvRows.push(row);
     });
-    
+
     // Convert to CSV
     const csvContent = csvRows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
-    
+
     // Create a download link
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -223,7 +223,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
+
     toast({
       title: "Export Complete",
       description: "Participation data has been downloaded as a CSV file",
@@ -233,7 +233,25 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
   // Function to calculate student participation statistics
   const calculateStudentStats = () => {
     if (!allParticipationRecords) return [];
-    
+
+    // Calculate the filter date based on selectedDateRange
+    const now = new Date();
+    const filterDate = new Date();
+
+    if (selectedDateRange === "week") {
+      filterDate.setDate(now.getDate() - 7);
+    } else if (selectedDateRange === "month") {
+      filterDate.setMonth(now.getMonth() - 1);
+    } else {
+      // "semester" - show all records from beginning of year
+      filterDate.setFullYear(now.getFullYear(), 0, 1); // Jan 1 of current year
+    }
+
+    // Filter records based on date range
+    const filteredRecords = allParticipationRecords.filter(
+      (record: ParticipationRecordWithStudent) => new Date(record.timestamp) >= filterDate
+    );
+
     const studentMap: Record<number, {
       id: number,
       name: string,
@@ -242,10 +260,10 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
       participationCount: number,
       lastParticipation: Date | null
     }> = {};
-    
-    allParticipationRecords.forEach((record: ParticipationRecordWithStudent) => {
+
+    filteredRecords.forEach((record: ParticipationRecordWithStudent) => {
       const { student, points, timestamp } = record;
-      
+
       if (!studentMap[student.id]) {
         studentMap[student.id] = {
           id: student.id,
@@ -256,22 +274,31 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
           lastParticipation: null
         };
       }
-      
+
       studentMap[student.id].totalPoints += points;
       studentMap[student.id].participationCount += 1;
-      
+
       const recordDate = new Date(timestamp);
-      if (!studentMap[student.id].lastParticipation || 
-          (studentMap[student.id].lastParticipation && recordDate > studentMap[student.id].lastParticipation)) {
+      if (!studentMap[student.id].lastParticipation ||
+        (studentMap[student.id].lastParticipation && recordDate > studentMap[student.id].lastParticipation)) {
         studentMap[student.id].lastParticipation = recordDate;
       }
     });
-    
+
     return Object.values(studentMap).sort((a, b) => b.totalPoints - a.totalPoints);
   };
-  
+
   // Get student statistics
   const studentStats = calculateStudentStats();
+
+  // Filter today's participation records to only show current day
+  const todayOnlyRecords = todayParticipationRecords?.filter(
+    (record: ParticipationRecordWithStudent) => {
+      const recordDate = new Date(record.timestamp);
+      const today = new Date();
+      return recordDate.toDateString() === today.toDateString();
+    }
+  );
 
   return (
     <div className="space-y-6">
@@ -313,25 +340,25 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
                         </p>
                       </div>
                       <div className="flex">
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           className="mr-2"
                           variant="secondary"
                           onClick={() => handleAssignPoints(request.student.id, 1, request.id)}
                         >
                           +1
                         </Button>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           className="mr-2"
                           variant="secondary"
                           onClick={() => handleAssignPoints(request.student.id, 2, request.id)}
                         >
                           +2
                         </Button>
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
+                        <Button
+                          size="sm"
+                          variant="ghost"
                           onClick={() => handleOpenFeedbackModal(request.student, request.id)}
                           title="Add feedback"
                         >
@@ -353,7 +380,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
             )}
           </CardContent>
         </Card>
-        
+
         {/* Today's participation */}
         <Card>
           <CardHeader className="pb-3">
@@ -363,18 +390,18 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
                 Today's Participation
               </CardTitle>
               <div className="flex space-x-2">
-                <Button 
-                  size="sm" 
-                  variant="outline" 
+                <Button
+                  size="sm"
+                  variant="outline"
                   className="flex items-center text-sm"
                   onClick={handleDeleteTodayRecords}
                 >
                   <TrashIcon className="h-3 w-3 mr-1" />
                   Delete All
                 </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
+                <Button
+                  size="sm"
+                  variant="outline"
                   className="flex items-center text-sm"
                   onClick={handleExportData}
                 >
@@ -390,7 +417,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
                 <RefreshCcw className="animate-spin h-6 w-6 mx-auto mb-2 text-muted-foreground" />
                 <p className="text-muted-foreground">Loading participation data...</p>
               </div>
-            ) : todayParticipationRecords && todayParticipationRecords.length > 0 ? (
+            ) : todayOnlyRecords && todayOnlyRecords.length > 0 ? (
               <div className="overflow-y-auto max-h-[400px]">
                 <Table>
                   <TableHeader>
@@ -402,7 +429,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {todayParticipationRecords
+                    {todayOnlyRecords
                       .map((record: ParticipationRecordWithStudent) => (
                         <TableRow key={record.id}>
                           <TableCell className="font-medium">
@@ -436,7 +463,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
           </CardContent>
         </Card>
       </div>
-      
+
       {/* Class participation overview */}
       <Card>
         <CardHeader className="pb-3">
@@ -447,7 +474,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
             </CardTitle>
             <div className="flex items-center">
               <label htmlFor="date-range" className="text-sm mr-2">Date Range:</label>
-              <Select 
+              <Select
                 value={selectedDateRange}
                 onValueChange={(value) => setSelectedDateRange(value)}
               >
@@ -488,17 +515,17 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
                       <TableCell>{student.totalPoints}</TableCell>
                       <TableCell>{student.participationCount}</TableCell>
                       <TableCell>
-                        {student.lastParticipation 
-                          ? format(student.lastParticipation, "MMM d, h:mm a") 
+                        {student.lastParticipation
+                          ? format(student.lastParticipation, "MMM d, h:mm a")
                           : "-"
                         }
                       </TableCell>
                       <TableCell>
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
+                        <Button
+                          size="sm"
+                          variant="ghost"
                           onClick={() => handleOpenFeedbackModal({
-                            id: student.id, 
+                            id: student.id,
                             name: student.name
                           })}
                           title="Add feedback"
@@ -522,7 +549,7 @@ export default function AdminDashboard({ selectedCourse }: AdminDashboardProps) 
           )}
         </CardContent>
       </Card>
-      
+
       {/* Feedback Modal */}
       {feedbackModalOpen && selectedStudent && (
         <FeedbackModal
