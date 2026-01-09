@@ -27,15 +27,6 @@ const registerSchema = insertUserSchema.extend({
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords do not match",
   path: ["confirmPassword"],
-}).refine((data) => {
-  // Verify professor code if role is admin
-  if (data.role === "admin" && data.professorCode !== "iamaprofessor") {
-    return false;
-  }
-  return true;
-}, {
-  message: "Invalid professor verification code",
-  path: ["professorCode"],
 });
 
 type RegisterFormData = z.infer<typeof registerSchema>;
@@ -66,7 +57,7 @@ export default function AuthForms() {
       professorCode: "",
     },
   });
-  
+
   // Watch role value to conditionally show professor code field
   const watchRole = registerForm.watch("role");
 
@@ -88,7 +79,7 @@ export default function AuthForms() {
         <TabsTrigger value="login">Login</TabsTrigger>
         <TabsTrigger value="register">Register</TabsTrigger>
       </TabsList>
-      
+
       <TabsContent value="login">
         <Card>
           <CardHeader>
@@ -113,7 +104,7 @@ export default function AuthForms() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={loginForm.control}
                   name="password"
@@ -127,10 +118,10 @@ export default function AuthForms() {
                     </FormItem>
                   )}
                 />
-                
-                <Button 
-                  type="submit" 
-                  className="w-full" 
+
+                <Button
+                  type="submit"
+                  className="w-full"
                   disabled={loginMutation.isPending}
                 >
                   {loginMutation.isPending ? "Logging in..." : "Login"}
@@ -148,7 +139,7 @@ export default function AuthForms() {
           </CardFooter>
         </Card>
       </TabsContent>
-      
+
       <TabsContent value="register">
         <Card>
           <CardHeader>
@@ -173,7 +164,7 @@ export default function AuthForms() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={registerForm.control}
                   name="username"
@@ -187,7 +178,7 @@ export default function AuthForms() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={registerForm.control}
                   name="email"
@@ -201,7 +192,7 @@ export default function AuthForms() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={registerForm.control}
                   name="role"
@@ -223,7 +214,7 @@ export default function AuthForms() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={registerForm.control}
                   name="password"
@@ -237,7 +228,7 @@ export default function AuthForms() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={registerForm.control}
                   name="confirmPassword"
@@ -251,7 +242,7 @@ export default function AuthForms() {
                     </FormItem>
                   )}
                 />
-                
+
                 {/* Only show professor code field if role is admin */}
                 {registerForm.watch("role") === "admin" && (
                   <FormField
@@ -268,10 +259,10 @@ export default function AuthForms() {
                     )}
                   />
                 )}
-                
-                <Button 
-                  type="submit" 
-                  className="w-full" 
+
+                <Button
+                  type="submit"
+                  className="w-full"
                   disabled={registerMutation.isPending}
                 >
                   {registerMutation.isPending ? "Creating account..." : "Register"}

@@ -29,6 +29,9 @@ async function comparePasswords(supplied: string, stored: string) {
 }
 
 export function setupAuth(app: Express) {
+  const PROFESSOR_CODE = process.env.PROFESSOR_VERIFICATION_CODE || "iamaprofessor";
+  console.log(`[Auth] Active Professor Verification Code: "${PROFESSOR_CODE}"`);
+
   const sessionSettings: session.SessionOptions = {
     secret: process.env.SESSION_SECRET || "participation-tracking-app-secret",
     resave: false,
@@ -72,7 +75,7 @@ export function setupAuth(app: Express) {
     try {
       const existingUser = await storage.getUserByUsername(req.body.username);
       if (existingUser) {
-        return res.status(400).send("Username already exists");
+        return res.status(400).json({ message: "Username already exists" });
       }
 
       // Check if professor verification code is provided to assign admin role
@@ -81,7 +84,7 @@ export function setupAuth(app: Express) {
       // Verify professor code before allowing admin role
       const PROFESSOR_CODE = process.env.PROFESSOR_VERIFICATION_CODE || "iamaprofessor";
       if (role === "admin" && professorCode !== PROFESSOR_CODE) {
-        return res.status(400).send("Invalid professor verification code");
+        return res.status(400).json({ message: "Invalid professor verification code" });
       }
 
       if (professorCode === PROFESSOR_CODE) {
